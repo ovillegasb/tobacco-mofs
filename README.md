@@ -3,7 +3,7 @@
 
 *Orlando Villegas* - **2024**
 
-Python module tobacco or Topologically Based Crystal Constructor was developed to rapidly produce molecular representations of orous crystals as crystallographic information (.cif) files, which can then be used for molecular simulation or for materials characterization.
+Python module tobacco or Topologically Based Crystal Constructor was developed to rapidly produce molecular representations of porous crystals as crystallographic information (.cif) files, which can then be used for molecular simulation or for materials characterization.
 
 This version has as starting point the tobacco_3.0 (https://github.com/tobacco-mofs/tobacco_3.0) version, I have made different modifications to make it executable from command line.
 
@@ -18,7 +18,7 @@ You can start from a virtual environment local:
 ```
 python -m venv .venv --copies --prompt Tobacco
 source .venv/bin/activate
-pip install ~/gitproyects/tobacco/dist/ToBaCco-3.1.0-py3-none-any.whl
+pip install ToBaCco-Modified
 ```
 
 ## Pre-use

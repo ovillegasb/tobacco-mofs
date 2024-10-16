@@ -6,8 +6,8 @@ with open('requirements.txt') as f:
     install_requires = f.read().strip().split('\n')
 
 setup(
-    name="ToBaCco",
-    version="3.1.0",
+    name="ToBaCco_Modified",
+    version="3.1.1",
     packages=find_packages(),
     install_requires=install_requires,
     author="Orlando Villegas",
@@ -18,7 +18,7 @@ setup(
     url='https://github.com/ovillegasb/tobacco',
     classifiers=[  # Clasificadores opcionales
         "Programming Language :: Python :: 3",
-        "LICENSE :: OSI APPROVED :: GNU GENERAL PUBLIC LICENSE V3 (GPLV3)",
+        "License :: OSI Approved :: GNU Affero General Public License v3",
         "Operating System :: OS Independent",
     ],
     entry_points={
@@ -29,5 +29,5 @@ setup(
     package_data={
         'tobacco': ['data/.gitkeep'],
     },
-    python_requires='>=3.9'
+    python_requires='>=3.10'
 )
