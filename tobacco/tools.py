@@ -518,7 +518,7 @@ def save_state(coord_list, box, angles, name="test", ft="cif", pbc=True):
     print(f"{name}.{ft} - Saved! ")
 
 
-def make_MOF(template, n_node_type=2, n_max_atoms=200, nodes_path="./nodes", edges_path="./edges", outdir="./outputs"):
+def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTION_SITE_BOND_LENGTH, nodes_path="./nodes", edges_path="./edges", outdir="./outputs"):
     """
     Generate a MOF.
 
@@ -693,7 +693,7 @@ def make_MOF(template, n_node_type=2, n_max_atoms=200, nodes_path="./nodes", edg
                 print("num_possible_XX_bonds:", num_possible_XX_bonds)
                 # Here, it's where tobacco place the sbus.
                 ea_dict = assign_node_vecs2edges(TG, unit_cell, SYMMETRY_TOL, template)
-                all_SBU_coords = SBU_coords(TG, ea_dict, CONNECTION_SITE_BOND_LENGTH, edges_path)
+                all_SBU_coords = SBU_coords(TG, ea_dict, connection_bond, edges_path)
 
                 # REVISAR??
                 sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma, sc_covar, Bstar_inv, max_length, callbackresults, ncra, ncca, scaling_data = scale(all_SBU_coords,a,b,c,ang_alpha,ang_beta,ang_gamma,max_le,num_vertices,Bstar,alpha,num_edges,FIX_UC,SCALING_ITERATIONS,PRE_SCALE,MIN_CELL_LENGTH,OPT_METHOD)
@@ -911,11 +911,11 @@ def run_tobacco_serial(templates, **kwargs):
         #     break
 
 
-def run_tobacco_parallel(templates, n_node_type=10, n_max_atoms=100):
+def run_tobacco_parallel(templates, n_node_type=10, n_max_atoms=100, connection_bond=CONNECTION_SITE_BOND_LENGTH):
     """Run ToBaCco in parallel."""
     poolSize = multiprocessing.cpu_count()
     print('Running parallel on', poolSize, 'processors...')
-    args = [(templates[name], n_node_type, n_max_atoms) for name in templates]
+    args = [(templates[name], n_node_type, n_max_atoms, connection_bond) for name in templates]
     #TODO
     # def wrapper_make_MOF(template, n_node_type=n_node_type, n_max_atoms=n_max_atoms):
     #     return make_MOF(template, n_node_type=n_node_type, n_max_atoms=n_max_atoms)

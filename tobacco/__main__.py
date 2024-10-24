@@ -214,6 +214,13 @@ defined topology.",
     )
 
     RunTobacco.add_argument(
+        "-bond",
+        help="Connection site bond length.",
+        type=float,
+        default=1.5
+    )
+
+    RunTobacco.add_argument(
         "--n_max_atoms",
         help="Maximum number of atoms allowed per structure.",
         type=int,
@@ -335,16 +342,16 @@ def main():
             print("Running ToBaCco")
             topols_dict = load_database()
             print("Topology selected:", topol)
-            make_MOF(topols_dict[topol], n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"])
+            make_MOF(topols_dict[topol], n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"])
 
         else:
             print("Running ToBaCco")
             print("Using all topologies")
             topols_dict = load_database()
             if args["run_parallel"]:
-                run_tobacco_parallel(topols_dict, n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"])
+                run_tobacco_parallel(topols_dict, n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"])
             else:
-                run_tobacco_serial(topols_dict, n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"])
+                run_tobacco_serial(topols_dict, n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"])
 
     elif args["check_top"]:
         topol = args["topology"]

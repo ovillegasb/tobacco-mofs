@@ -18,7 +18,7 @@ You can start from a virtual environment local:
 ```
 python -m venv .venv --copies --prompt Tobacco
 source .venv/bin/activate
-pip install ToBaCco-Modified
+pip install ToBaCco-Modified==3.1.2
 ```
 
 ## Pre-use
