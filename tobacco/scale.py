@@ -35,7 +35,10 @@ def objective(V, ncra, ncca, Alpha, ne, nv, Bstar_inv, SBU_IP):
 
 def scale(
 	all_SBU_coords,
-	a,b,c,ang_alpha,ang_beta,ang_gamma,max_le,num_vertices,Bstar,alpha,num_edges,FIX_UC,SCALING_ITERATIONS,PRE_SCALE,MIN_CELL_LENGTH,OPT_METHOD):
+	a, b, c,
+	ang_alpha, ang_beta, ang_gamma, max_le,
+	num_vertices, Bstar, alpha, num_edges,
+	FIX_UC, SCALING_ITERATIONS, PRE_SCALE, MIN_CELL_LENGTH, OPT_METHOD):
 	"""
 	Make cell.
 
@@ -76,8 +79,8 @@ def scale(
 			for j in range(i, w):
 				jvec = sbu[1][j][1]
 				jind = sbu[1][j][0]
-				dot  = np.dot(ivec,jvec)
-				SBU_ip_append([iind,jind,dot])
+				dot = np.dot(ivec, jvec)
+				SBU_ip_append([iind, jind, dot])
 		all_SBU_ip_append((sbu[0], SBU_ip))
 	ncra = num_vertices - 1
 	ncca = 3
@@ -93,20 +96,19 @@ def scale(
 	# print(ucvars)
 
 	if np.any(FIX_UC):
-
 		uc_bounds = []
 		uc_bounds_append = uc_bounds.append
-		for f,p in zip(FIX_UC, ucvars):
+		for f, p in zip(FIX_UC, ucvars):
 			if f:
-				uc_bounds_append((p,p))
+				uc_bounds_append((p, p))
 			else:
-				uc_bounds_append((0,None))
+				uc_bounds_append((0, None))
 		uc_bounds = tuple(uc_bounds)
 	else:
 		max_a = 2 * scale_guess * a
 		max_b = 2 * scale_guess * a
 		max_c = 2 * scale_guess * a
-		uc_bounds = ((MIN_CELL_LENGTH, max_a), (MIN_CELL_LENGTH, max_b), (MIN_CELL_LENGTH, max_c), (20,160), (20,160), (20,160))
+		uc_bounds = ((MIN_CELL_LENGTH, max_a), (MIN_CELL_LENGTH, max_b), (MIN_CELL_LENGTH, max_c), (20, 160), (20, 160), (20, 160))
 	# print(uc_bounds)
 
 	init_variables = [scale_guess * a, scale_guess * b, scale_guess * c, ang_alpha, ang_beta, ang_gamma] + covars_values
@@ -116,8 +118,7 @@ def scale(
 	# print("bounds:", bounds)
 
 	Bstar_inv = np.linalg.inv(Bstar)
-
-	print('scaling unit cell and vertex positions...')
+	# print('scaling unit cell and vertex positions...')
 
 	if OPT_METHOD == 'L-BFGS-B':
 		print('optimizing with local minimization algorithm L-BFGS-B...')

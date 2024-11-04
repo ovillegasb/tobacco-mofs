@@ -504,7 +504,7 @@ def write_cif_SBU(file, coord_list, fixed_bonds, box_params, cell, wrap_coords=T
     print(f"File written: {file}")
 
 
-def save_state(coord_list, box, angles, name="test", ft="cif", pbc=True):
+def save_state(coord_list, box, angles, name="test", ft="cif", pbc=True, is2D=False, desired_z_spacing=4.0):
     """Save structure o cif file sing ASE."""
     struct = ase.Atoms()
     for pn in coord_list:
@@ -514,11 +514,46 @@ def save_state(coord_list, box, angles, name="test", ft="cif", pbc=True):
 
     struct.set_cell(box + angles)
     struct.set_pbc(pbc)
+
+    if is2D:
+        desired_z_spacing = desired_z_spacing
+        print(f"Topology 2D scaling z to {desired_z_spacing} anstroms")
+        # ase.io.write("test1.xyz", struct)
+        cell = struct.get_cell()
+        current_z_length = cell[2, 2]
+        positions = struct.get_positions()
+        positions[:, 2] = np.where(
+            positions[:, 2] < current_z_length / 2,
+            positions[:, 2], positions[:, 2] - current_z_length
+        )
+        struct.set_positions(positions)
+
+        scaling_factor_z = desired_z_spacing / current_z_length
+        new_cell = cell.copy()
+        new_cell[2, 2] *= scaling_factor_z
+
+        # new_z_length = max(desired_z_spacing, current_z_length)
+        # print(new_z_length)
+        # new_cell = cell.copy()
+        # new_cell[2, 2] = new_z_length
+
+        struct.set_cell(new_cell, scale_atoms=False)
+        struct.wrap()
+        # print(sc_c)
+        # desired_z_spacing = 3.0
+        # current_z_length = sc_c
+        # scaling_factor_z = desired_z_spacing / current_z_length
+        # sc_c *= scaling_factor_z
+        # print(sc_c)
+        # for at in placed_all:
+        #     print(at)
+        #     print(type(at))
+
     ase.io.write(f"{name}.{ft}", struct)
     print(f"{name}.{ft} - Saved! ")
 
 
-def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTION_SITE_BOND_LENGTH, nodes_path="./nodes", edges_path="./edges", outdir="./outputs"):
+def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTION_SITE_BOND_LENGTH, desired_z_spacing=4.0, nodes_path="./nodes", edges_path="./edges", outdir="./outputs"):
     """
     Generate a MOF.
 
@@ -811,6 +846,10 @@ def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTIO
                     print("Maximum number of atoms reached.")
                     return None
 
+                is2D = False
+                if "template_2D_database" in template:
+                    is2D = True
+
                 if WRITE_CIF:
                     print('writing cif...')
                     if not os.path.exists(outdir):
@@ -819,7 +858,9 @@ def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTIO
                         placed_all,
                         [sc_a, sc_b, sc_c],
                         [sc_alpha, sc_beta, sc_gamma],
-                        name=f"{outdir}/{cifname}"
+                        name=f"{outdir}/{cifname}",
+                        is2D=is2D,
+                        desired_z_spacing=desired_z_spacing
                     )
 
 
@@ -911,7 +952,7 @@ def run_tobacco_serial(templates, **kwargs):
         #     break
 
 
-def run_tobacco_parallel(templates, n_node_type=10, n_max_atoms=100, connection_bond=CONNECTION_SITE_BOND_LENGTH):
+def run_tobacco_parallel(templates, n_node_type=10, n_max_atoms=100, connection_bond=CONNECTION_SITE_BOND_LENGTH, desired_z_spacing=4.0):
     """Run ToBaCco in parallel."""
     poolSize = multiprocessing.cpu_count()
     print('Running parallel on', poolSize, 'processors...')

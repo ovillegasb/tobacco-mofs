@@ -217,7 +217,7 @@ defined topology.",
         "-bond",
         help="Connection site bond length.",
         type=float,
-        default=1.5
+        default=1.0
     )
 
     RunTobacco.add_argument(
@@ -243,6 +243,15 @@ defined topology.",
         "--run_parallel",
         help="Run ToBaCco in Parallel.",
         action="store_true"
+    )
+
+    RunTobacco.add_argument(
+        "--z_spacing",
+        help="Defined spacing for Z for 2D topologies. Default is 4.0 anstroms.",
+        type=float,
+        default=4.0,
+        metavar="z_distance",
+        dest="desired_z_spacing"
     )
 
     return vars(parser.parse_args())
@@ -342,16 +351,16 @@ def main():
             print("Running ToBaCco")
             topols_dict = load_database()
             print("Topology selected:", topol)
-            make_MOF(topols_dict[topol], n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"])
+            make_MOF(topols_dict[topol], n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"], desired_z_spacing=args["desired_z_spacing"])
 
         else:
             print("Running ToBaCco")
             print("Using all topologies")
             topols_dict = load_database()
             if args["run_parallel"]:
-                run_tobacco_parallel(topols_dict, n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"])
+                run_tobacco_parallel(topols_dict, n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"], desired_z_spacing=args["desired_z_spacing"])
             else:
-                run_tobacco_serial(topols_dict, n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"])
+                run_tobacco_serial(topols_dict, n_node_type=args["n_node_type"], n_max_atoms=args["n_max_atoms"], connection_bond=args["bond"], desired_z_spacing=args["desired_z_spacing"])
 
     elif args["check_top"]:
         topol = args["topology"]
