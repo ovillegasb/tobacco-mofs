@@ -1,45 +1,127 @@
-# tobacco_3.0
+# ToBaCCo-MOFS
 
-# Authors
-- Ryther Anderson
-- Yamil Colón
-- Diego Gómez-Gualdrón
-
-# Motivation
-Our Topologically Based Crystal Constructor (ToBaCCo) was developed to rapidly produce molecular representations of porous crystals as crystallographic information (.cif) files, which can then be used for molecular simulation or for materials characterization. 
-
-# Installation and Dependencies
-ToBaCCo has been tested for Python 2.7 and Python 3.7. We recommend building a Python 2.7/3.7 environment using Anaconda. You will need the following packages:
-- numpy
-- networkx
-- scipy
-
-To set up a Python X.7 environment first install Anaconda. After installing Anaconda, run:
-```
-conda create --name my_tobacco python=X.7
-```
-where my_tobacco is the name of the environment (which can be changed to whatever you like) and X is 2 or 3. ToBaCCo will probably work with Python 3.Y, but has only been tested for 3.7 and 3.8.
-Next, load your new environment:
-```
-conda activate my_tobacco
-```
-(this command changes for Windows, see https://docs.anaconda.com/anaconda/user-guide/tasks/switch-environment/)
-Finally, install the above packages, thus:
-```
-conda install numpy
-conda install networkx
-conda install scipy
-```
-Once these are installed, you can clone or download the repository and start running ToBaCCo. Please note that only certain versions of these packages have been tested. Specifically, for Python 2.7 
-the tested versions are numpy=1.14.2, networkx=2.2, and scipy=1.1.0. For Python 3.7 the tested versions are numpy=1.19.1 and numpy=1.15.4, networkx=2.2 and networkx=2.5, and scipy=1.1.0, scipy=1.3.1, and scipy=1.5.2. 
+![version](https://img.shields.io/badge/version-3.1.2-blue)
 
 
-# Usage
-Execute the tobacco.py file to run ToBaCCo:
-```
-python tobacco.py
-```
-For more details on ToBaCCo inputs, outputs, and configuration see the ToBaCCo_manual.pdf included with the repository.
+Topologically Based Crystal Constructor (**ToBaCCo**) is a Python tool developed to rapidly generate molecular representations of porous crystals as Crystallographic Information Files (`.cif`). These can be used for molecular simulation and materials characterization.
 
-# License
-GNU General Public License (can be viewed in the LICENSE file included in this repository)
+## Version
+
+This is version **3.1.2**, a modified and extended version of [ToBaCCo_3.0](https://github.com/tobacco-mofs/tobacco_3.0).
+
+- Original Authors:
+  - Ryther Anderson
+  - Yamil Colón
+  - Diego Gómez-Gualdrón
+
+- Modified and extended by:
+  - **Orlando Villegas** (2025)
+
+
+## Key Features in v3.1.2
+
+- Command-line interface (CLI) for simplified use.
+- Extended topology generation options.
+- New routines for SBU generation from Gaussian `.com` files.
+- Integrated topology database handling.
+- Better Python 3 compatibility.
+
+---
+
+
+## Installation
+
+You can install it from source or package (if uploaded to PyPI):
+
+### Virtual Environment Setup (recommended)
+
+```bash
+python -m venv .venv --copies --prompt tobacco
+source .venv/bin/activate
+```
+
+## Getting Started
+
+
+### Check installation:
+
+
+```bash
+tobacco -h
+```
+
+### Download the topology database:
+
+Before you can use tobacco you must download the topology database. To do this, execute, this may take a few minutes:
+
+```bash
+tobacco --get_topols_db
+```
+
+## Example of uses
+
+1. Generate geometry around a metal center:
+
+To generate a cif file where a block is built with the metal in the center with dummy atoms forming the indicated geometry:
+
+```bash
+tobacco -m Sc -pg Oh -d 1.0 -o 6X_Sc.cif
+```
+
+2. Show available point groups:
+
+```bash
+tobacco --show_pgs
+```
+
+3. Generate geometries for a metal:
+
+```bash
+tobacco --gen_geometries Sc -d 1.0
+```
+
+4. Build SBU from `.com` file (Gaussian):
+
+Convert `.com` file (Gaussian format) to SBU (Secundary Building Unit) ToBaCco, used to create a structure with dummy atoms to be removed (X-->Fr):
+
+```bash
+tobacco --build_sbu node -i 4X_C2.com -o 4X_C2.cif
+```
+
+5. Build edge SBU:
+
+Method to generate cif files used for edges, and used to preserve the dummy atom:
+
+```bash
+tobacco --build_sbu edge -i 2X_SCN.com -X 1 2 -o 2X_SCN.cif
+```
+
+
+6. Generate a dummy edge (X--X):
+
+Generate an edge without ligand, X--X. It functions as a connector to more complex topologies.
+
+```bash
+tobacco --make_XX_edge
+```
+
+
+7. Check topology availability:
+
+```bash
+tobacco --check_top -t pcu
+```
+
+8. Generate MOF structure with given topology:
+
+
+```bash
+tobacco --make_MOF -t pcu
+```
+
+9. Generate MOFs for all topologies in parallel:
+
+
+```bash
+tobacco --make_MOF --all_topols --run_parallel
+```
