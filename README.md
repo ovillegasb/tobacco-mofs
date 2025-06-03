@@ -125,3 +125,10 @@ tobacco --make_MOF -t pcu
 ```bash
 tobacco --make_MOF --all_topols --run_parallel
 ```
+
+
+## 📄 License
+
+This project is licensed under the GNU General Public License v3.0. See the [LICENSE](./LICENSE) file for more details.
+
+This version is a fork and modification of ToBaCCo_3.0, developed by Ryther Anderson et al.
