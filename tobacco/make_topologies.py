@@ -14,10 +14,10 @@ root = os.path.dirname(__file__)
 db = os.path.join(root, "data")
 
 
-def download_topologies(url):
-    """Download the topology cgd file from the RCSR website."""
-    root = os.path.join(db)
-    path = os.path.join(root, "nets.cgd")
+def get_topols_db(url):
+    """Download topology database."""
+    print("RCSR url:", url)
+    print("The topology database will be downloaded and configured.")
     try:
         resp = requests.get(url, stream=True)
     except requests.exceptions.ConnectTimeout:
@@ -25,18 +25,7 @@ def download_topologies(url):
         print(url)
         exit()
 
-    if resp.status_code == 200:
-        print("Successfully downloaded the nets from RCSR.")
-        resp.raw.decode_content = True
-        with open(path, "wb") as outpt:
-            shutil.copyfileobj(resp.raw, outpt)
-
-
-def get_topols_db(url="http://rcsr.net/downloads/RCSRnets.cgd"):
-    """Download topology database."""
-    print("RCSR url:", url)
-    print("The topology database will be downloaded and configured.")
-    download_topologies(url)
+    return resp
 
 
 def topols_config(cgd_filename="nets.cgd", consider_2D=False):
@@ -79,10 +68,15 @@ def topols_config(cgd_filename="nets.cgd", consider_2D=False):
     edge_center_name = 'Lr'  # placeholder edge name
 
     if edge_center_name in vnames:
-        raise ValueError('Edge center name must not be in vnames', edge_center_name)
+        raise ValueError(
+            'Edge center name must not be in vnames', edge_center_name
+        )
 
     # List of 2D topologies where a is the dummy axis
-    dummya_list = ['cpr', 'cqx', 'sdd', 'sdf', 'sdh', 'sdi', 'sdo', 'sdv', 'sdz', 'tdv', 'tdz']
+    dummya_list = [
+        'cpr', 'cqx', 'sdd', 'sdf', 'sdh', 'sdi',
+        'sdo', 'sdv', 'sdz', 'tdv', 'tdz'
+    ]
 
     # List of 2D topologies where b is the dummy axis
     dummyb_list = [
@@ -127,7 +121,8 @@ def topols_config(cgd_filename="nets.cgd", consider_2D=False):
 
             # Get the topology name
             elif 'name' in line.lower():
-                topology_val = line.lower().split('name')[-1].replace('*', '_star').replace('-','').strip()
+                topology_val = line.lower().split('name')[-1].replace(
+                    '*', '_star').replace('-', '').strip()
                 if topology_val in forbidden_names:
                     topology_val += '0'
 
@@ -226,12 +221,18 @@ def topols_config(cgd_filename="nets.cgd", consider_2D=False):
                     bad = True
                     continue
 
-                vertices.append([float(vert_val[2]), float(vert_val[3]), float(vert_val[4])])
+                vertices.append([
+                    float(vert_val[2]),
+                    float(vert_val[3]),
+                    float(vert_val[4])
+                ])
                 vertices_count += 1
 
                 # Make sure there are enough names for the vertices
                 if vertices_count > len(vnames):
-                    raise ValueError('More vertices than vnames for '+topology_val)
+                    raise ValueError(
+                        'More vertices than vnames for ' + topology_val
+                    )
 
                 # Make a coordination number dictionary
                 cn[vnames[vertices_count-1]] = int(vert_val[1])
@@ -350,7 +351,8 @@ def topols_config(cgd_filename="nets.cgd", consider_2D=False):
             )
         except:
             warnings.warn(
-                'Error: '+topology+'. Incompatible spacegroup and lattice constants', Warning
+                'Error: '+topology+'. Incompatible spacegroup and lattice\
+                constants', Warning
             )
             pm_structure.to(filename=os.path.join(tmpl_errors, topology+'.cif'))
             continue
@@ -362,8 +364,12 @@ def topols_config(cgd_filename="nets.cgd", consider_2D=False):
             n_edge_type = len(Structure.from_spacegroup(
                 group, lattice_vectors, [edge_center_name], [edge_center_pos])
             )
-            dummy_edge = Structure(lattice_vectors, [edge_center_name], [edges_head[j]])[0]
-            dummy_center = Structure(lattice_vectors, [edge_center_name], [edge_center_pos])[0]
+            dummy_edge = Structure(
+                lattice_vectors, [edge_center_name], [edges_head[j]]
+            )[0]
+            dummy_center = Structure(
+                lattice_vectors, [edge_center_name], [edge_center_pos]
+            )[0]
             bd_list.extend([2*dummy_center.distance(dummy_edge)]*n_edge_type)
 
         _, unique_indices = np.unique(bd_list, return_index=True)
@@ -385,7 +391,9 @@ def topols_config(cgd_filename="nets.cgd", consider_2D=False):
             pm_structure.make_supercell(n_supercells)
 
         # Get atoms of edge centers and vertices
-        vertices_indices = [atom_idx for atom_idx, atom in enumerate(pm_structure) if atom.species_string != edge_center_name]
+        vertices_indices = [
+            atom_idx for atom_idx, atom in enumerate(pm_structure) if atom.species_string != edge_center_name
+        ]
         # edge_center_indices = [atom_idx for atom_idx, atom in enumerate(pm_structure) if atom.species_string == edge_center_name]
 
         # Make text for top of CIF
@@ -546,3 +554,19 @@ def topols_config(cgd_filename="nets.cgd", consider_2D=False):
     end_time = time.time()
     execution_time = end_time - start_time
     print("Topology configuration done! %.2f s" % execution_time)
+
+
+def download_topologies(url):
+    """Download the topology cgd file from the RCSR website."""
+    root = os.path.join(db)
+    path = os.path.join(root, "nets.cgd")
+
+    resp = get_topols_db(url)
+
+    if resp.status_code == 200:
+        print("Successfully downloaded the nets from RCSR.")
+        resp.raw.decode_content = True
+        with open(path, "wb") as outpt:
+            shutil.copyfileobj(resp.raw, outpt)
+
+    topols_config(consider_2D=True)

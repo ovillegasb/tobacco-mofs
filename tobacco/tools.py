@@ -17,6 +17,7 @@ import shutil
 import hashlib
 import multiprocessing
 from multiprocessing import Pool
+import ase.formula
 import numpy as np
 import pandas as pd
 import ase
@@ -24,7 +25,7 @@ from ase.geometry.analysis import Analysis
 import ase.io
 
 # Specific function from ToBaCco
-from tobacco.ciftemplate2graph import ct2g
+from tobacco.ciftemplate2graph import ct2g, CrystalGraph
 from tobacco.bbcif_properties import cncalc, bbelems
 from tobacco.vertex_edge_assign import vertex_assign, assign_node_vecs2edges
 from tobacco.cycle_cocyle import cycle_cocyle, Bstar_alpha
@@ -187,6 +188,48 @@ skeleton_X = {
 }
 
 
+def set_directory(folder, output=None):
+    if not os.path.exists(folder):
+        os.mkdir(folder)
+
+    if output is not None:
+        return os.path.join(folder, os.path.basename(output))
+    else:
+        return folder
+
+
+def node_directory(folder="./nodes", output=None):
+    """Ensure that the directory nodes exists."""
+    return set_directory(folder, output)
+
+
+def edge_directory(folder="./edges", output=None):
+    """Ensure that the directory edges exists."""
+    return set_directory(folder, output)
+
+
+def nodes_and_edges_exist(nodes="./nodes", edges="./edges"):
+    """
+    Checks whether both './nodes' and './edges' directories exist and are not
+    empty.
+
+    Returns:
+        bool: True if both directories exist and contain at least one file,
+        False otherwise.
+    """
+    required_dirs = [nodes, edges]
+
+    for directory in required_dirs:
+        # Check if the directory exists and is indeed a directory
+        if not os.path.isdir(directory):
+            return False
+        # Check if the directory contains at least one file
+        if not os.listdir(directory):
+            return False
+
+    return True
+
+
 def load_database():
     """Load ToBaCco database."""
     print("ToBaCco path:", db)
@@ -194,7 +237,9 @@ def load_database():
     topols_pth_2D = os.path.join(db, 'template_2D_database/*.cif')
     templates = sorted(glob.glob(topols_pth_2D) + glob.glob(topols_pth))
     # topols_dict = {cif.replace(".cif", ""): cif for cif in templates}
-    topols_dict = {os.path.basename(cif).replace(".cif", ""): cif for cif in templates}
+    topols_dict = {
+        os.path.basename(cif).replace(".cif", ""): cif for cif in templates
+    }
     return topols_dict
 
 
@@ -280,16 +325,19 @@ def make_XX_edge():
     print("XX edge saved!")
 
 
-def build_sbu_metal_center(element, pointgroup, d=1.0, box=[10, 10, 10], angles=[90., 90., 90.], pbc=True):
+def build_sbu_metal_center(
+        metal, pointgroup, d=1.0, box=[10, 10, 10], angles=[90., 90., 90.],
+        pbc=True, **kwargs):
     """
     Create an SBU from a metallic element and its point group.
 
-    This function returns an ase.atoms object with the dimensions of the box already defined. The
-    molecule created will be centered in the center of the box.
+    This function returns an ase.atoms object with the dimensions of the box
+    already defined. The molecule created will be centered in the center of
+    the box.
 
     Parameters:
     -----------
-    element : str
+    metal : str
         Metal element.
     pointgroup : str
         Desired point group.
@@ -305,7 +353,7 @@ def build_sbu_metal_center(element, pointgroup, d=1.0, box=[10, 10, 10], angles=
     formula, pos = dummy_geometry(pointgroup)
     sbu = ase.Atoms(formula, positions=pos)
     try:
-        sbu += ase.Atom(element, (0, 0, 0))
+        sbu += ase.Atom(metal, (0, 0, 0))
     except KeyError:
         pass
 
@@ -322,7 +370,7 @@ def build_sbu_metal_center(element, pointgroup, d=1.0, box=[10, 10, 10], angles=
 
 
 def build_sbu_edge(file, box=[10, 10, 10], angles=[90., 90., 90.], pbc=True):
-    """TODO"""
+    """TODO"""#
     mol = ase.io.read(file)
     mol.set_cell(box + angles)
     mol.set_pbc(pbc)
@@ -333,7 +381,13 @@ def build_sbu_edge(file, box=[10, 10, 10], angles=[90., 90., 90.], pbc=True):
     return mol
 
 
-def build_sbu_from_gaus(file, box=[10, 10, 10], angles=[90., 90., 90.], pbc=True):
+def build_sbu_from_gaus(
+        file,
+        box=[10, 10, 10],
+        angles=[90., 90., 90.],
+        pbc=True,
+        **kwargs
+    ):
     """Construct ASE Atoms object from a Gaussian .com input file."""
     dfatoms = read_input_gaus(file)
     mol = ase.Atoms()
@@ -350,9 +404,12 @@ def build_sbu_from_gaus(file, box=[10, 10, 10], angles=[90., 90., 90.], pbc=True
     return mol
 
 
-def extract_info(atoms, ndx_X=[], remove_dummy=True):
+def extract_info(atoms, ndx_X=[]):
     """
     Extract information from a structure ASE.Atoms.
+
+    Adapts the information of an ASE.Atoms object and adapts it to tobacco
+    parameters.
 
     Parameters:
     -----------
@@ -360,25 +417,24 @@ def extract_info(atoms, ndx_X=[], remove_dummy=True):
         Atoms structure of the ASE module.
 
     ndx_X : list
-        List defining the index of atoms to be used as dummy atoms X, however, these will be
-        preserved in the final mof.
+        List defining the index of atoms to be used as dummy atoms X, however,
+        these will be preserved in the final mof.
 
     remove_dummy : bool
-        Substitute the atomic symbol for Fr, which is used by ToBaCco to remove these dummy atoms.
-
+        Substitute the atomic symbol for Fr, which is used by ToBaCco to
+        remove these dummy atoms.
     """
-    print("Chemical formula:", atoms.symbols.get_chemical_formula(), "\n")
+
+    remove_dummy = len(ndx_X) == 0
 
     # Create dict of index: X
     ndx_X = {i: "X" for i in ndx_X}
 
     # scaled_params
     box_params = list(atoms.cell.cellpar())
-    # print("box_params:", box_params, "\n")
 
     # sc_unit_cell
     cell = atoms.cell.array
-    # print("cell:\n", cell, "\n")
 
     # placed_all
     coord_list = []
@@ -393,11 +449,6 @@ def extract_info(atoms, ndx_X=[], remove_dummy=True):
         else:
             coord_list.append([f"{symb}{i+1}", at.symbol, at.x, at.y, at.z])
 
-    # print("coord_list:")
-    # for row in coord_list:
-    #     print(row)
-    # print()
-
     # fixed_bonds
     fixed_bonds = []
     matrixD = atoms.get_all_distances()
@@ -408,17 +459,20 @@ def extract_info(atoms, ndx_X=[], remove_dummy=True):
             if "X" in coord_list[i][0] and "X" in coord_list[ib][0]:
                 continue
             else:
-                fixed_bonds.append([coord_list[i][0], coord_list[ib][0], matrixD[i][ib], ".", "S"])
-
-    # print("fixed_bonds:")
-    # for row in fixed_bonds:
-    #     print(row)
-    # print()
+                fixed_bonds.append([
+                    coord_list[i][0],
+                    coord_list[ib][0],
+                    matrixD[i][ib],
+                    ".",
+                    "S"
+                ])
 
     return coord_list, fixed_bonds, box_params, cell
 
 
-def write_cif_SBU(file, coord_list, fixed_bonds, box_params, cell, wrap_coords=True):
+def write_cif_SBU(
+        file, coord_list, fixed_bonds, box_params, cell, wrap_coords=True
+):
     """
     Save cif file.
 
@@ -472,7 +526,8 @@ def write_cif_SBU(file, coord_list, fixed_bonds, box_params, cell, wrap_coords=T
         cvec = np.dot(np.linalg.inv(cell), vec)
 
         if wrap_coords:
-            cvec = np.mod(cvec, 1)  # makes sure that all fractional coordinates are in [0,1]
+            cvec = np.mod(cvec, 1)  # makes sure that all fractional
+            # coordinates are in [0,1]
 
         lines += '{:7} {:>4} {:>15} {:>15} {:>15}\n'.format(
             row[0],
@@ -553,11 +608,17 @@ def save_state(coord_list, box, angles, name="test", ft="cif", pbc=True, is2D=Fa
     print(f"{name}.{ft} - Saved! ")
 
 
-def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTION_SITE_BOND_LENGTH, desired_z_spacing=4.0, nodes_path="./nodes", edges_path="./edges", outdir="./outputs"):
+def make_MOF(
+        template, n_node_type=2, n_max_atoms=200,
+        connection_bond=CONNECTION_SITE_BOND_LENGTH,
+        desired_z_spacing=4.0, nodes_path="./nodes",
+        edges_path="./edges", outdir="./outputs", **kwargs
+):
     """
     Generate a MOF.
 
-    Function derived from the run_template function, this function is the central use of ToBaCco.
+    Function derived from the run_template function, this function is the
+    central use of ToBaCco.
 
     Parameters:
     -----------
@@ -576,17 +637,21 @@ def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTIO
     n_max_atoms : int
         Maximum number of atoms allowed per structure.
     """
+    if not nodes_and_edges_exist(nodes_path, edges_path):
+        raise FileNotFoundError("Nodes and edges folders do not exist")
+
     print()
-    print('======================================================================================')
+    print('==================================================================')
     print('template:', template)
-    print('======================================================================================')
+    print('==================================================================')
     print()
 
     print("Number of node types allowed:", n_node_type)
     print(f"Number of atoms allowed: <= {n_max_atoms}")
 
+    cg = CrystalGraph(template)
     cat_count = 0
-    for net in ct2g(template):
+    for net in cg:
         cat_count += 1
         TG, start, unit_cell, TVT, TET, TNAME, a, b, c, ang_alpha, ang_beta, ang_gamma, max_le, catenation = net
         # ---------------------------------------------
@@ -623,10 +688,15 @@ def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTIO
         edge_counts = dict((data['type'], 0) for e0, e1, data in TG.edges(data=True))
         for e0, e1, data in TG.edges(data=True):
             edge_counts[data['type']] += 1
-
         print("edge_counts:", edge_counts)
+
         # if it's empty, not nodes weren't assign
-        vas = vertex_assign(TG, TVT, node_cns, unit_cell, USER_SPECIFIED_NODE_ASSIGNMENT, SYMMETRY_TOL, ALL_NODE_COMBINATIONS)
+        vas = vertex_assign(
+            TG, TVT, node_cns, unit_cell,
+            USER_SPECIFIED_NODE_ASSIGNMENT,
+            SYMMETRY_TOL,
+            ALL_NODE_COMBINATIONS
+        )
         CB, CO = cycle_cocyle(TG)
         for va in vas:
             if len(va) == 0:
@@ -634,6 +704,7 @@ def make_MOF(template, n_node_type=2, n_max_atoms=200, connection_bond=CONNECTIO
                 print('Moving to the next template...')
                 print()
                 continue
+        return "Done!"
 
         if len(CB) != (len(TG.edges()) - len(TG.nodes()) + 1):
             print('The cycle basis is incorrect.')
@@ -994,24 +1065,6 @@ def read_input_gaus(file):
     return coord
 
 
-def gen_geometries_metal(metal, d=0.8):
-    """
-    Generate geometries using a metal center.
-
-    Parameters:
-    -----------
-    metal : str
-        Indicates the atomic element to be used.
-    """
-    for pointgroup in skeleton_X:
-        print(pointgroup, metal)
-        sbu = build_sbu_metal_center(metal, pointgroup, d)
-        parameters = extract_info(sbu)
-        nX = sum(sbu.symbols == "X")
-        # write cif
-        write_cif_SBU(f"./nodes/{nX}X_{metal}_{pointgroup}.cif", *parameters)
-
-
 def clean_folder(folder):
     """Clean folder."""
     if not os.path.exists(folder):
@@ -1091,3 +1144,102 @@ def setting_dftb_inputs(out="./method_II_dftbplus"):
         dftb_input = dftb_in.replace("MOF_PATH", os.path.abspath(file))
         with open(f"{out}/{id_mof}/dftb_in.hsd", "w") as F:
             F.write(dftb_input)
+
+
+def available_pg():
+    """Show available groups in tobacco."""
+    print("Available point groups:")
+    print("="*40)
+    print(f"{"symbol":<14}{"Bonds with X"}")
+    print("="*40)
+    for pg in skeleton_X:
+        print(f"\t{pg:<14}{skeleton_X[pg][0].count("X")}")
+
+
+def gen_name_from_sbu(sbu, pg=None):
+    """Return a name using the generated SBU structure."""
+    if pg is not None:
+        pg = "_" + pg
+    else:
+        pg = ""
+    return sbu.get_chemical_formula(mode="metal") + pg + ".cif"
+
+
+def gen_sbu_metal_center(**kwargs):
+    element = kwargs["metal"]
+    pointgroup = kwargs["pointgroup"]
+    d = kwargs["distance"]
+
+    sbu = build_sbu_metal_center(element, pointgroup, d)
+    parameters = extract_info(sbu)
+
+    output_file = kwargs["output"]
+    if output_file is None:
+        output_file = gen_name_from_sbu(sbu)
+    output = node_directory(output=output_file)
+
+    # write cif
+    write_cif_SBU(output, *parameters)
+
+    return "Done!"
+
+
+def gen_geometries_metal(metal, distance=0.8, **kwargs):
+    """
+    Generate geometries using a metal center.
+
+    Parameters:
+    -----------
+    metal : str
+        Indicates the atomic element to be used.
+    """
+    for pointgroup in skeleton_X:
+        sbu = build_sbu_metal_center(metal, pointgroup, distance)
+        parameters = extract_info(sbu)
+        output = node_directory(
+            folder="./nodes",
+            output=gen_name_from_sbu(sbu, pointgroup)
+        )
+        # write cif
+        write_cif_SBU(output, *parameters)
+
+    return "Done!"
+
+
+def gen_sbu_edge(**kwargs):
+    """Generate edge block from a ligand coordinate file."""
+    input_file = kwargs["ligand"]
+    output_file = kwargs["output"]
+    filename = os.path.basename(input_file)
+
+    ndx_X = kwargs["ndx_X"]
+
+    if filename.endswith(".com"):
+        sbu = build_sbu_from_gaus(input_file)
+
+        if output_file is None:
+            output_file = gen_name_from_sbu(sbu)
+            output = edge_directory(output=output_file)
+
+        # It checks if the file contains dummy atoms by default.
+        # If there are no atoms, check if indices have been defined to
+        # indicate which atoms will function as non-removable dummy atoms.
+        if "X" not in sbu.get_chemical_symbols():
+            if ndx_X is None:
+                print("No dummy atoms are found in the structure and no\
+defined indices (non-removable X) are found.")
+                print("="*10)
+                for at in sbu:
+                    print("    ", at.index, at.symbol)
+                print("="*10)
+                print("Example use: -X 0 1")
+                raise ValueError("No dummy atoms have been defined.")
+
+            parameters = extract_info(sbu, ndx_X)
+        else:
+            parameters = extract_info(sbu)
+
+        # write cif
+        write_cif_SBU(output, *parameters)
+
+    return "Done!"

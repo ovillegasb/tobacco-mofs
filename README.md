@@ -109,7 +109,7 @@ tobacco --make_XX_edge
 7. Check topology availability:
 
 ```bash
-tobacco --check_top -t pcu
+tobacco --check_top pcu
 ```
 
 8. Generate MOF structure with given topology:
@@ -126,6 +126,37 @@ tobacco --make_MOF -t pcu
 tobacco --make_MOF --all_topols --run_parallel
 ```
 
+## Use Case
+
+We will study the case of scandium Sc[+3] with the ligand phO2[-2].
+
+1. We are going to generate the Sc node using the pg of D4h:
+
+```bash
+python -m tobacco -m Sc -pg D4h
+```
+
+2. Now we are going to generate the edge from a gaussian .com file.
+
+```bash
+python -m tobacco -l file_N3.com -X 0 2
+```
+
+3. In case we are interested in a particular topology we can check if it exists in the downloaded database.
+
+```bash
+python -m tobacco --check_top sql
+```
+
+## Testing
+
+```bash
+python -m unittest discover -s tests
+```
+
+```bash
+python -m unittest tests.test_sbu_metal.TestSBUmetal.test_gen_name_from_sbu_valid
+```
 
 ## 📄 License
 
