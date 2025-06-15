@@ -75,6 +75,27 @@ def PBC3DF(c1, c2):
     return c2
 
 
+class SubgraphData:
+    def __init__(self, graph, start, unit_cell, cn_types, edge_types,
+                 cifname, cell_params, max_le, catenation):
+        self.TG = graph
+        self.start = start
+        self.unit_cell = unit_cell
+        self.TVT = cn_types
+        self.TET = edge_types
+        self.TNAME = cifname
+        self.cell_params = cell_params  # dict with:
+        #                               aL, bL, cL, alpha, beta, gamma
+        self.max_le = max_le
+        self.catenation = catenation
+
+    def __repr__(self):
+        return "<SubgraphData({}, nodes={}, edges={})>".format(
+            self.cifname,
+            len(self.graph.nodes),
+            len(self.graph.edges))
+
+
 class CrystalGraph:
     def __init__(self, path):
         self.path = path
@@ -132,6 +153,7 @@ class CrystalGraph:
         cy = (cL * bL * np.cos(alpha * pi / 180.0) - bx * cx) / by
         cz = (cL**2 - cx**2 - cy**2)**0.5
         self.unit_cell = np.array([[ax, ay, az], [bx, by, bz], [cx, cy, cz]]).T
+        ne = 0
 
         for line in self.template:
             s = line.split()
@@ -140,7 +162,14 @@ class CrystalGraph:
                 types.append(ty)
                 f_nvec = np.array(list(map(float, s[2:5])))
                 c_nvec = np.dot(self.unit_cell, f_nvec)
-                G.add_node(s[0], type=ty, fcoords=f_nvec, ccoords=c_nvec, cn=[], cifname=[])
+                G.add_node(
+                    s[0],
+                    type=ty,
+                    fcoords=f_nvec,
+                    ccoords=c_nvec,
+                    cn=[],
+                    cifname=[]
+                )
             if isedge(s):
                 edge_exist = True
                 if '_' in s[3]:
@@ -148,7 +177,10 @@ class CrystalGraph:
                 elif s[3] == '.':
                     lbl = np.array([0, 0, 0])
                 else:
-                    raise ValueError("Unrecognized bond translational symmetries in " + self.cifname)
+                    raise ValueError(
+                        "Unrecognized bond translational \
+                            symmetries in " + self.cifname
+                    )
                 nlbl = -1 * lbl
                 if (
                     (s[0], s[1], *lbl) not in aae and
@@ -156,6 +188,7 @@ class CrystalGraph:
                     (s[0], s[1], *nlbl) not in aae and
                     (s[1], s[0], *nlbl) not in aae
                 ):
+                    ne += 1
                     aae.append((s[0], s[1], *lbl))
                     v1 = G.nodes[s[0]]['fcoords']
                     v2 = G.nodes[s[1]]['fcoords'] + lbl
@@ -171,6 +204,7 @@ class CrystalGraph:
                         length=le,
                         fcoords=ef_coords,
                         ccoords=ec_coords,
+                        index=ne,
                         pd=(s[0], s[1])
                     )
 
@@ -178,7 +212,9 @@ class CrystalGraph:
             raise ValueError(f'No edges defined in template: {self.cifname}')
 
     def _split_subgraphs(self):
-        S = [self.graph.subgraph(c).copy() for c in nx.connected_components(self.graph)]
+        S = [
+            self.graph.subgraph(c).copy() for c in nx.connected_components(self.graph)
+        ]
         if len(S) > 1:
             self.catenation = True
 
@@ -192,9 +228,13 @@ class CrystalGraph:
                 if self.start is None:
                     self.start = data['fcoords']
 
-            for count, (e0, e1, key, data) in enumerate(sub.edges(keys=True, data=True), 1):
+            for count, (e0, e1, key, data) in enumerate(
+                sub.edges(keys=True, data=True), 1
+            ):
                 key = (count,) + key[1:]
-                l = sorted([re.sub('[^a-zA-Z]', '', e0), re.sub('[^a-zA-Z]', '', e1)])
+                l = sorted([
+                    re.sub('[^a-zA-Z]', '', e0), re.sub('[^a-zA-Z]', '', e1)
+                ])
                 self.edge_types.add(tuple(l))
                 SG.add_edge(e0, e1, key=key, type=tuple(l), **data)
 
@@ -204,32 +244,23 @@ class CrystalGraph:
         """
         Allow iteration over the generated subgraphs.
         Yields:
-            tuple: (
-            graph, start, unit_cell, cn_types, edge_types,
-            cifname, cell params..., max_le, catenation
-        )
+            SubgraphData: Encapsulated graph information.
         """
         for sg in self.subgraphs:
-            yield (
-                sg,
-                self.start,
-                self.unit_cell,
-                self.cn_types,
-                self.edge_types,
-                self.cifname,
-                self.cell_params['aL'],
-                self.cell_params['bL'],
-                self.cell_params['cL'],
-                self.cell_params['alpha'],
-                self.cell_params['beta'],
-                self.cell_params['gamma'],
-                self.max_le,
-                self.catenation
+            yield SubgraphData(
+                graph=sg,
+                start=self.start,
+                unit_cell=self.unit_cell,
+                cn_types=self.cn_types,
+                edge_types=self.edge_types,
+                cifname=self.cifname,
+                cell_params=self.cell_params,
+                max_le=self.max_le,
+                catenation=self.catenation
             )
 
 
 def node_vecs(node, G, unit_cell, label):
-
     edge_coords = []
     edge_coords_append = edge_coords.append
 

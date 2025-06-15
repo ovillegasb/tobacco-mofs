@@ -9,130 +9,127 @@ from tobacco.ciftemplate2graph import node_vecs
 import warnings
 
 
-def vertex_assign(TG, TVT, node_cns, unit_cell, USNA, SYM_TOL, ALL_NODE_COMBINATIONS):
+def vertex_assign(
+        TG, TVT, node_cns, unit_cell, USNA, SYM_TOL, ALL_NODE_COMBINATIONS
+):
 
-	node_dict = dict((k, []) for k in TVT)
+    node_dict = dict((k, []) for k in TVT)
 
-	for node in node_cns:
-		for k in TVT:
-			if node[0] == k[0]:
-				node_dict[k].append(node[1])
+    for node in node_cns:
+        for k in TVT:
+            if node[0] == k[0]:
+                node_dict[k].append(node[1])
 
-	if USNA:
+    if USNA:
+        va = []
+        va_append = va.append
 
-		va = []
-		va_append = va.append
+        choice_dict = dict((k, '') for k in TVT)
+        if not os.path.isfile('vertex_assignment.txt'):
+            raise ValueError('User specificed node assignment is on, but \
+there is not vertex_assignment.txt')
+        else:
+            with open('vertex_assignment.txt', 'r') as va_key:
+                va_key = va_key.read()
+                va_key = va_key.split('\n')
+                choices = [(l.split()[0], l.split()[1]) for l in va_key if len(l.split()) ==2]
+            for k in node_dict:
+                for c in choices:
+                    if c[0] == k[1] and c[1] in node_dict[k]:
+                        choice_dict[k] = c[1]
+                        break
+                    else:
+                        continue
 
-		choice_dict = dict((k,'') for k in TVT)
-		if not os.path.isfile('vertex_assignment.txt'):
-			raise ValueError('User specificed node assignment is on, but there is not vertex_assignment.txt')
-		else:
-			with open('vertex_assignment.txt', 'r') as va_key:
-				va_key = va_key.read()
-				va_key = va_key.split('\n')
-				choices = [(l.split()[0],l.split()[1]) for l in va_key if len(l.split())==2]
-			for k in node_dict:
-				for c in choices:
-					if c[0] == k[1] and c[1] in node_dict[k]:
-						choice_dict[k] = c[1]
-						break
-					else:
-						continue
+        for k in choice_dict:
+            if len(choice_dict[k]) == 0:
+                raise ValueError('Node type ' + k[0] + ' has not assigned cif.')
 
-		for k in choice_dict:
+            for n in TG.nodes(data=True):
+                name, ndict = n
+                if ndict['type'] == k[1]:
+                    va_append((name, choice_dict[k]))
 
-			if len(choice_dict[k]) == 0:
-				raise ValueError('Node type ' + k[0] + ' has not assigned cif.')
+        va = [va]
 
-			for n in TG.nodes(data=True):
-				name, ndict = n
-				if ndict['type'] == k[1]:
-					va_append((name, choice_dict[k]))
+    else:
+        print('**************************************************************')
+        print('RMSD of the compatible node BBs with assigned vertices:       ')
+        print('**************************************************************')
+        print()
 
-		va = [va]
+        sym_assign = []
+        sym_assign_append = sym_assign.append
 
-	else:
+        for k in node_dict:
+            print('vertex', k[1], '('+str(k[0]) + ' connected)')
+            matched = 0
+            unmatched = 0
+            if len(node_dict[k]) == 0:
+                continue
+            coord_num = k[0]
+            for n in TG.nodes(data=True):
+                name, ndict = n
+                distances = []
+                distances_append = distances.append
 
-		print('*****************************************************************')
-		print('RMSD of the compatible node BBs with assigned vertices:          ')
-		print('*****************************************************************')
-		print()
-		
-		sym_assign = []
-		sym_assign_append = sym_assign.append
+                if ndict['type'] == k[1]:
+                    for cif in node_dict[k]:
+                        nvec = np.array([v/np.linalg.norm(v) for v in node_vecs(name, TG, unit_cell, False)])
+                        bbxvec = np.array([v/np.linalg.norm(v) for v in X_vecs(cif, 'nodes', False)])
+                        rmsd, rot, tran = superimpose(bbxvec, nvec)
+                        distances_append((rmsd, cif))
 
-		for k in node_dict:
+                    for d in distances:
+                        disp, cif = d
+                        if d[0] < SYM_TOL[coord_num]:
+                            matched += 1
+                            matches = '(within tolerance)'
+                        else:
+                            unmatched += 1
+                            matches = '(outside tolerance)'
+                        print('    ', cif, 'deviation =', np.round(disp,5), matches)
 
-			print('vertex', k[1], '('+str(k[0]) + ' connected)')
+                    for d in distances:
+                        if d[0] < SYM_TOL[coord_num]:
+                            sym_assign_append((k[1], d[1], d[0]))
+                    break
+            print('*', matched, 'compatible building blocks out of',
+                  len(node_dict[k]), 'available for node', k[1], '*')
+        print()
 
-			matched = 0
-			unmatched = 0
-			
-			if len(node_dict[k]) == 0:
-				continue
-			coord_num = k[0]
-	
-			for n in TG.nodes(data=True):
-				name, ndict = n
-				distances = []
-				distances_append = distances.append
+        rearrange = dict((k[1], []) for k in TVT)
+        for a in sym_assign:
+            rearrange[a[0]].append((a[0], a[1], a[2]))
 
-				if ndict['type'] == k[1]:
-					for cif in node_dict[k]:
+        va_uncomb = [rearrange[a] for a in rearrange]
+        
+        for i in range(len(va_uncomb)):
+            va_uncomb[i] = sorted(va_uncomb[i], key=lambda x: x[-1])
 
-						nvec = np.array([v/np.linalg.norm(v) for v in node_vecs(name, TG, unit_cell, False)])
-						bbxvec = np.array([v/np.linalg.norm(v) for v in X_vecs(cif, 'nodes', False)])
-						rmsd,rot,tran = superimpose(bbxvec,nvec)
-						distances_append((rmsd,cif))
+        va = []
+        va_append = va.append
+        used = []
+        used_append = used.append
+        for l in itertools.product(*va_uncomb):
 
-					for d in distances:
-						disp, cif = d
-						if d[0] < SYM_TOL[coord_num]:
-							matched += 1
-							matches = '(within tolerance)'
-						else:
-							unmatched += 1
-							matches = '(outside tolerance)'
-						print('    ', cif, 'deviation =', np.round(disp,5), matches)
+            cifs = sorted(tuple([c[1] for c in l]))
+            if cifs in used and not ALL_NODE_COMBINATIONS:
+                continue
 
-					for d in distances:
-						if d[0] < SYM_TOL[coord_num]:
-							sym_assign_append((k[1],d[1],d[0]))
-					break
-			print('*', matched, 'compatible building blocks out of', len(node_dict[k]), 'available for node', k[1], '*')
-		print()
-		
-		rearrange = dict((k[1],[]) for k in TVT)
-		for a in sym_assign:
-			rearrange[a[0]].append((a[0],a[1],a[2]))
+            choice_dict = dict((i[0], i[1]) for i in l)
+            va_temp = []
+            va_temp_append = va_temp.append
 
-		va_uncomb = [rearrange[a] for a in rearrange]
-		
-		for i in range(len(va_uncomb)):
-			va_uncomb[i] = sorted(va_uncomb[i], key=lambda x:x[-1])
+            for n in TG.nodes(data=True):
+                name, ndict = n
+                va_temp_append((name, choice_dict[ndict['type']]))
 
-		va = []
-		va_append = va.append
-		used = []
-		used_append = used.append
-		for l in itertools.product(*va_uncomb):
+            va_append(va_temp)
+            used_append(cifs)
 
-			cifs = sorted(tuple([c[1] for c in l]))
-			if cifs in used and not ALL_NODE_COMBINATIONS:
-				continue
+    return va
 
-			choice_dict = dict((i[0],i[1]) for i in l)
-			va_temp = []
-			va_temp_append = va_temp.append
-
-			for n in TG.nodes(data=True):
-				name,ndict = n
-				va_temp_append((name, choice_dict[ndict['type']]))
-
-			va_append(va_temp)
-			used_append(cifs)
-					
-	return va
 
 def assign_node_vecs2edges(TG, unit_cell, SYM_TOL, template_name):
 	

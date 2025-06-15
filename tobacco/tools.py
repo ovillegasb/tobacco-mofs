@@ -1,8 +1,8 @@
 """
-Submodulo de tobacco creado para compilar algunas funciones.
+Submodule of tobacco created to compile some functions.
 
-Las funciones presentes estan dirigidas para usar a tobacco como un modulo, y facilitan su
-ejecucion a nivel de terminal.
+The present functions are intended to use tobacco as a module,
+and facilitate its execution at terminal level.
 
 Author: Orlando Villegas
 
@@ -25,12 +25,12 @@ from ase.geometry.analysis import Analysis
 import ase.io
 
 # Specific function from ToBaCco
-from tobacco.ciftemplate2graph import ct2g, CrystalGraph
+from tobacco.ciftemplate2graph import CrystalGraph
 from tobacco.bbcif_properties import cncalc, bbelems
 from tobacco.vertex_edge_assign import vertex_assign, assign_node_vecs2edges
 from tobacco.cycle_cocyle import cycle_cocyle, Bstar_alpha
 from tobacco.SBU_geometry import SBU_coords
-from tobacco.scale import scale
+from tobacco.scale import scale, UnitCellScaler
 from tobacco.scaled_embedding2coords import omega2coords
 from tobacco.place_bbs import scaled_node_and_edge_vectors, place_nodes, place_edges
 from tobacco.adjust_edges import adjust_edges
@@ -65,7 +65,7 @@ ALL_NODE_COMBINATIONS = configuration.ALL_NODE_COMBINATIONS
 COMBINATORIAL_EDGE_ASSIGNMENT = configuration.COMBINATORIAL_EDGE_ASSIGNMENT
 SINGLE_METAL_MOFS_ONLY = configuration.SINGLE_METAL_MOFS_ONLY
 MOFS_ONLY = configuration.MOFS_ONLY
-CONNECTION_SITE_BOND_LENGTH = 1.5  # configuration.CONNECTION_SITE_BOND_LENGTH
+CONNECTION_SITE_BOND_LENGTH = 2.0  # configuration.CONNECTION_SITE_BOND_LENGTH
 FIX_UC = configuration.FIX_UC
 SCALING_ITERATIONS = configuration.SCALING_ITERATIONS
 PRE_SCALE = configuration.PRE_SCALE
@@ -247,8 +247,8 @@ def dummy_geometry(poitgroup):
     """
     Return a dictionary with the chemical formula and its coordinates.
 
-    This is done without occupying the center of the geometry. Each dummy atom has a distance of
-    1.0 from the center.
+    This is done without occupying the center of the geometry. Each dummy atom
+    has a distance of 1.0 from the center.
 
     Parameters:
     -----------
@@ -386,8 +386,7 @@ def build_sbu_from_gaus(
         box=[10, 10, 10],
         angles=[90., 90., 90.],
         pbc=True,
-        **kwargs
-    ):
+        **kwargs):
     """Construct ASE Atoms object from a Gaussian .com input file."""
     dfatoms = read_input_gaus(file)
     mol = ase.Atoms()
@@ -653,13 +652,14 @@ def make_MOF(
     cat_count = 0
     for net in cg:
         cat_count += 1
-        TG, start, unit_cell, TVT, TET, TNAME, a, b, c, ang_alpha, ang_beta, ang_gamma, max_le, catenation = net
+        # TG, start, unit_cell, TVT, TET, TNAME, a, b, c, ang_alpha, ang_beta, ang_gamma, max_le, catenation = net
         # ---------------------------------------------
         # Information:
         #   TG: Main network.
         #   start: Coordinates of the first node.
         #   unit_cell: Unit cell matrix.
-        #   TVT: Set composed of tuples with the number of connections and a label
+        #   TVT: Set composed of tuples with the number of connections and a
+        # label
         # (example: {(4, 'Ti'), (3, 'Er'), (6, 'V')}).
         #   TET: Set composed of tuples with pairs of nodes
         # (examples: TET: {('Er', 'V'), ('Er', 'Ti')}).
@@ -668,65 +668,70 @@ def make_MOF(
         #   max_le: Max lenght (float)
         #   catenation: bool
         # ---------------------------------------------
-        if len(TVT) > n_node_type:
-            print("Topology with number of node types greater than the one defined (%s)" % n_node_type)
+        if len(net.TVT) > n_node_type:
+            print("Topology with number of node types greater than the \
+one defined (%s)" % n_node_type)
             return None
 
-        TVT = sorted(TVT, key=lambda x: x[0], reverse=True)
-        print("TVT:", TVT)
-        TET = sorted(TET, reverse=True)
-        print("TET:", TET)
-        # Node database files, with their number of connections.
-        # example: [(2, '2X_Sc_D*h.cif'), (4, '4X_Sc_D4h.cif'), ...]
+        net.TVT = sorted(net.TVT, key=lambda x: x[0], reverse=True)
+        print("TVT:", net.TVT)
+        net.TET = sorted(net.TET, reverse=True)
+        print("TET:", net.TET)
         node_cns = [(cncalc(node, path=nodes_path), node) for node in os.listdir(nodes_path)]
         print("node_cns:", node_cns)
-        print('Number of vertices = ', len(TG.nodes()))
-        print('Number of edges = ', len(TG.edges()))
+        print('Number of vertices = ', len(net.TG.nodes()))
+        print('Number of edges = ', len(net.TG.edges()))
         print()
 
         # Number of edges present.
-        edge_counts = dict((data['type'], 0) for e0, e1, data in TG.edges(data=True))
-        for e0, e1, data in TG.edges(data=True):
+        edge_counts = dict(
+            (data['type'], 0) for e0, e1, data in net.TG.edges(data=True)
+        )
+        for e0, e1, data in net.TG.edges(data=True):
             edge_counts[data['type']] += 1
         print("edge_counts:", edge_counts)
 
         # if it's empty, not nodes weren't assign
         vas = vertex_assign(
-            TG, TVT, node_cns, unit_cell,
+            net.TG, net.TVT, node_cns, net.unit_cell,
             USER_SPECIFIED_NODE_ASSIGNMENT,
             SYMMETRY_TOL,
             ALL_NODE_COMBINATIONS
         )
-        CB, CO = cycle_cocyle(TG)
+
         for va in vas:
             if len(va) == 0:
-                print('At least one vertex does not have a building block with the correct number of connection sites.')
+                print('At least one vertex does not have a building block \
+with the correct number of connection sites.')
                 print('Moving to the next template...')
                 print()
                 continue
-        return "Done!"
 
-        if len(CB) != (len(TG.edges()) - len(TG.nodes()) + 1):
+        CB, CO = cycle_cocyle(net.TG)
+        if len(CB) != (len(net.TG.edges()) - len(net.TG.nodes()) + 1):
             print('The cycle basis is incorrect.')
-            print('The number of cycles in the cycle basis does not equal the rank of the cycle space.')
+            print('The number of cycles in the cycle basis does not equal \
+the rank of the cycle space.')
             print('Moving to the next tempate...')
             continue
 
-        num_edges = len(TG.edges())
+        num_edges = len(net.TG.edges())
         print("num_edges:", num_edges)
-        Bstar, alpha = Bstar_alpha(CB, CO, TG, num_edges)
+        Bstar, alpha = Bstar_alpha(CB, CO, net.TG, num_edges)
 
-        num_vertices = len(TG.nodes())
+        num_vertices = len(net.TG.nodes())
         print("num_vertices:", num_vertices)
 
         # Help to combinate edges in the assignment.
         if COMBINATORIAL_EDGE_ASSIGNMENT:
-            eas = list(itertools.product([e for e in os.listdir(edges_path)], repeat=len(TET)))
+            eas = list(itertools.product(
+                [e for e in os.listdir(edges_path)], repeat=len(net.TET))
+            )
         else:
             edge_files = sorted([e for e in os.listdir(edges_path)])
             eas = []
             i = 0
-            while len(eas) < len(TET):
+            while len(eas) < len(net.TET):
                 eas.append(edge_files[i])
                 i += 1
                 if i == len(edge_files):
@@ -741,21 +746,28 @@ def make_MOF(
             # example: [('V1', '3X_Co.cif'), ('V2', '3X_Co.cif')]
             node_elems = [bbelems(i[1], nodes_path) for i in va]
             # print("node_elems:", node_elems)
-            metals = [[i for i in j if i in metal_elements] for j in node_elems]
+            metals = [
+                [i for i in j if i in metal_elements] for j in node_elems
+            ]
             metals = list(set([i for j in metals for i in j]))
             # print("metals:", metals)
 
-            v_set = [('v' + str(vname_dict[re.sub('[0-9]', '', i[0])]), i[1]) for i in va]
+            v_set = [
+                (
+                    'v' + str(vname_dict[re.sub('[0-9]', '', i[0])]), i[1]
+                    ) for i in va
+            ]
             v_set = sorted(list(set(v_set)), key=lambda x: x[0])
             v_set = [v[0] + '-' + v[1] for v in v_set]
 
-            print('*****************************************************************')
+            print('**********************************************************')
             print('vertex assignment : ', v_set)
-            print('*****************************************************************')
+            print('**********************************************************')
             print()
 
             if SINGLE_METAL_MOFS_ONLY and len(metals) != 1:
-                print(v_set, 'contains no metals or multiple metal elements, no cif will be written')
+                print(v_set, 'contains no metals or multiple metal \
+elements, no cif will be written')
                 print()
                 continue
 
@@ -765,30 +777,32 @@ def make_MOF(
                 continue
 
             for v in va:
-                for n in TG.nodes(data=True):
+                for n in net.TG.nodes(data=True):
                     if v[0] == n[0]:
                         n[1]['cifname'] = v[1]
 
             for ea in eas:
                 g += 1
-                print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+                print('++++++++++++++++++++++++++++++++++++++++++++++++++++++')
                 print('edge assignment : ', ea)
-                print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+                print('++++++++++++++++++++++++++++++++++++++++++++++++++++++')
                 print()
 
-                type_assign = dict((k, []) for k in sorted(TET, reverse=True))
-                for k, m in zip(TET, ea):
+                type_assign = dict(
+                    (k, []) for k in sorted(net.TET, reverse=True)
+                )
+                for k, m in zip(net.TET, ea):
                     type_assign[k] = m
-
                 print("type_assign:", type_assign)
-                for e in TG.edges(data=True):
+
+                for e in net.TG.edges(data=True):
                     ty = e[2]['type']
                     for k in type_assign:
                         if ty == k or (ty[1], ty[0]) == k:
                             e[2]['cifname'] = type_assign[k]
 
                 num_possible_XX_bonds = 0
-                for edge_type, cifname in zip(TET, ea):
+                for edge_type, cifname in zip(net.TET, ea):
                     if cifname == 'ntn_edge.cif':
                         factor = 1
                     else:
@@ -797,12 +811,38 @@ def make_MOF(
                     print("edge_type_count:", edge_type_count)
                     num_possible_XX_bonds += factor * edge_type_count
                 print("num_possible_XX_bonds:", num_possible_XX_bonds)
-                # Here, it's where tobacco place the sbus.
-                ea_dict = assign_node_vecs2edges(TG, unit_cell, SYMMETRY_TOL, template)
-                all_SBU_coords = SBU_coords(TG, ea_dict, connection_bond, edges_path)
 
-                # REVISAR??
-                sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma, sc_covar, Bstar_inv, max_length, callbackresults, ncra, ncca, scaling_data = scale(all_SBU_coords,a,b,c,ang_alpha,ang_beta,ang_gamma,max_le,num_vertices,Bstar,alpha,num_edges,FIX_UC,SCALING_ITERATIONS,PRE_SCALE,MIN_CELL_LENGTH,OPT_METHOD)
+                # Here, it's where tobacco place the sbus.
+                ea_dict = assign_node_vecs2edges(
+                    net.TG, net.unit_cell, SYMMETRY_TOL, template)
+                all_SBU_coords = SBU_coords(
+                    net.TG, ea_dict, connection_bond, edges_path)
+
+                #REVISAR
+                #-------->
+                scaler = UnitCellScaler(
+                    all_SBU_coords,
+                    net.cell_params,
+                    net.max_le,
+                    num_vertices,
+                    Bstar, alpha,
+                    num_edges,
+                    FIX_UC,
+                    SCALING_ITERATIONS,
+                    PRE_SCALE,
+                    MIN_CELL_LENGTH,
+                    OPT_METHOD)
+
+                sc_cell_parms, sc_covar, Bstar_inv, max_length, callbackresults, ncra, ncca, scaling_data = scaler.optimize()
+                sc_a = sc_cell_parms["aL"]
+                sc_b = sc_cell_parms["bL"]
+                sc_c = sc_cell_parms["cL"]
+                sc_alpha = sc_cell_parms["alpha"]
+                sc_beta = sc_cell_parms["beta"]
+                sc_gamma = sc_cell_parms["gamma"]
+
+                # sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma, sc_covar, Bstar_inv, max_length, callbackresults, ncra, ncca, scaling_data = scale(all_SBU_coords,a,b,c,ang_alpha,ang_beta,ang_gamma,max_le,num_vertices,Bstar,alpha,num_edges,FIX_UC,SCALING_ITERATIONS,PRE_SCALE,MIN_CELL_LENGTH,OPT_METHOD)
+                #-------->
 
                 print('*******************************************')
                 print('The scaled unit cell parameters are : ')
@@ -826,7 +866,7 @@ def make_MOF(
                 if cflag:
                     continue
 
-                scaled_params = [sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma]
+                scaled_params = [sc_cell_parms[par] for par in sc_cell_parms]
                 sc_Alpha = np.r_[alpha[0:num_edges-num_vertices+1, :], sc_covar]
                 sc_omega_plus = np.dot(Bstar_inv, sc_Alpha)
 
@@ -839,11 +879,21 @@ def make_MOF(
                 cx = sc_c * np.cos(sc_beta * pi/180.0)
                 cy = (sc_c * sc_b * np.cos(sc_alpha * pi/180.0) - bx * cx) / by
                 cz = (sc_c ** 2.0 - cx ** 2.0 - cy ** 2.0) ** 0.5
-                sc_unit_cell = np.asarray([[ax, ay, az], [bx, by, bz], [cx, cy, cz]]).T
+                sc_unit_cell = np.asarray([
+                    [ax, ay, az],
+                    [bx, by, bz],
+                    [cx, cy, cz]]
+                ).T
 
-                scaled_coords = omega2coords(start, TG, sc_omega_plus, (sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma), num_vertices, template, g, WRITE_CHECK_FILES)
+                scaled_coords = omega2coords(
+                    net.start, net.TG, sc_omega_plus,
+                    (sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma),
+                    num_vertices, template, g, WRITE_CHECK_FILES)
+
                 # Here scaled node and edge place X to direction for topologies
-                nvecs, evecs = scaled_node_and_edge_vectors(scaled_coords, sc_omega_plus, sc_unit_cell, ea_dict)
+                nvecs, evecs = scaled_node_and_edge_vectors(
+                    scaled_coords, sc_omega_plus, sc_unit_cell, ea_dict
+                )
                 # Coordinates and bond list
                 try:
                     placed_nodes, node_bonds = place_nodes(
@@ -852,12 +902,15 @@ def make_MOF(
                 except np.linalg.LinAlgError:
                     print("convergence not achieved!")
                     return None
+
                 # Coordinates of edges
                 # Center and X--X positions
                 # print("evecs:\n")
                 # for ev in evecs:
                 #     print(ev)
-                placed_edges, edge_bonds = place_edges(evecs, CHARGES, len(placed_nodes), edges_path)
+                placed_edges, edge_bonds = place_edges(
+                    evecs, CHARGES, len(placed_nodes), edges_path
+                )
                 # if RECORD_CALLBACK:
                 #     vnames = '_'.join([v.split('.')[0] for v in v_set])
                 #     if len(ea) <= 5:
@@ -907,7 +960,7 @@ def make_MOF(
 
                 template_name = os.path.basename(template).split(".")[0]
                 bond_check_code = ""
-                if catenation:
+                if net.catenation:
                     cifname = template_name + '_' + vnames + '_' + enames + bond_check_code + '_' + 'CAT' + str(cat_count)  # + '.cif'
                 else:
                     cifname = template_name + '_' + vnames + '_' + enames + bond_check_code  # + '.cif'
@@ -934,8 +987,7 @@ def make_MOF(
                         desired_z_spacing=desired_z_spacing
                     )
 
-
-                ########## For me it's not necessary.
+                # For me it's not necessary.
                 '''
 
                 print(nconnections)
@@ -1011,6 +1063,8 @@ def make_MOF(
                         cifname = cifname[0:241]+'_truncated.cif'
                     write_cif(fc_placed_all, fixed_bonds, scaled_params, sc_unit_cell, cifname, CHARGES)
                 '''
+
+    return "Done!"
 
 
 def run_tobacco_serial(templates, **kwargs):

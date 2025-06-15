@@ -1,7 +1,8 @@
 import unittest
 import os
 import shutil
-import tobacco.tools as tools
+# import tobacco.tools as tools
+from tobacco import tools
 from tobacco.ciftemplate2graph import CrystalGraph
 
 
@@ -35,6 +36,9 @@ class MakeMOF2DTest(unittest.TestCase):
 
         if os.path.exists("./edges"):
             shutil.rmtree("./edges")
+
+        # if os.path.exists("./outputs"):
+        #     shutil.rmtree("./outputs")
 
     def test_make_mof_2D(self):
         metal_options = {

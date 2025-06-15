@@ -1,5 +1,5 @@
 from __future__ import print_function
-from tobacco.ciftemplate2graph import ct2g
+# from tobacco.ciftemplate2graph import ct2g
 from tobacco.vertex_edge_assign import vertex_assign, assign_node_vecs2edges
 from tobacco.cycle_cocyle import cycle_cocyle, Bstar_alpha
 from tobacco.bbcif_properties import cncalc, bbelems

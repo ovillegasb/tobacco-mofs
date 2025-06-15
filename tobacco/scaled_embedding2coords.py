@@ -8,12 +8,15 @@ from tobacco.ciftemplate2graph import isvert
 database = os.path.dirname(__file__)
 templates_path = os.path.join(database, "template_database")
 
-def omega2coords(start, TG, sc_omega_plus, uc_params, num_vertices, template, g, CHECK):
+
+def omega2coords(
+		start, TG, sc_omega_plus, uc_params, num_vertices, template, g, CHECK
+	):
 
 	sc_a,sc_b,sc_c,sc_alpha,sc_beta,sc_gamma = uc_params
 	path = os.path.join('templates', template)
 	
-	shortest_path_dict = nx.shortest_path(TG)
+	shortest_path_dict = dict(nx.shortest_path(TG))
 	SN = sorted(TG.nodes(), key = lambda x : int(re.sub('[A-Za-z]','',x)))
 	sequential_paths = [(SN[i],SN[i+1]) for i in range(num_vertices) if i+1 < num_vertices]
 	start = np.asarray(start)
