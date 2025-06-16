@@ -1,6 +1,7 @@
 import unittest
 import os
 import shutil
+import random
 from tobacco import tools
 
 
@@ -132,4 +133,61 @@ class MakeMOF3D_ION_Test(unittest.TestCase):
             n_ions=3
         )
 
+        self.assertEqual(result, "Done!")
+
+
+class MakeMOF_ION_ParallelTest(unittest.TestCase):
+
+    def setUp(self):
+        topols_dict = tools.load_database(db_path="../porE/data_ions/")
+        templates = {top: topols_dict[top] for top in random.sample(list(topols_dict.keys()), 16)}
+
+        self.options = {
+            "templates": templates,
+            "n_max_atoms": 200,
+            "n_node_type": 1,
+            "ion": "./NH4.xyz",
+            "templates_path": "",
+            "n_ions": 3
+        }
+
+    def tearDown(self):
+        if os.path.exists("./nodes"):
+            shutil.rmtree("./nodes")
+
+        if os.path.exists("./edges"):
+            shutil.rmtree("./edges")
+
+        if os.path.exists("./outputs"):
+            shutil.rmtree("./outputs")
+
+        if os.path.isfile("N3.com"):
+            os.remove("N3.com")
+
+        if os.path.isfile("NH4.xyz"):
+            os.remove("NH4.xyz")
+
+    def test_make_mof_3D(self):
+        metal_options = {
+            "metal": "Sc",
+            "pointgroup": "Oh",
+            "distance": 0.8,
+            "output": None
+        }
+
+        # tools.gen_sbu_metal_center(**metal_options)
+        tools.gen_geometries_metal(**metal_options)
+
+        gen_input_com()
+        edge_options = {
+            "file": "N3.com",
+            "ligand": "N3.com",
+            "ndx_X": [0, 2],
+            "output": None
+        }
+        tools.gen_sbu_edge(**edge_options)
+
+        gen_input_ion_NH4_xyz()
+
+        result = tools.run_tobacco_parallel(**self.options)
         self.assertEqual(result, "Done!")

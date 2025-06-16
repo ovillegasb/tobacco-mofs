@@ -209,7 +209,8 @@ generation, or --make_MOF 'topol' to specify a topology.",
         help="Connection site bond length.",
         type=float,
         default=1.0,
-        metavar="r"
+        metavar="r",
+        dest="connection_bond"
     )
 
     RunTobacco.add_argument(
@@ -289,6 +290,7 @@ database.")
         db_path = args["db_path"]
         topols_dict = tools.load_database(db_path)
         templates_path = "" if db_path != db else db
+        args["templates_path"] = templates_path
 
         print("Running ToBaCco...")
 
@@ -299,7 +301,7 @@ database.")
                 topols_dict[topol],
                 n_node_type=args["n_node_type"],
                 n_max_atoms=args["n_max_atoms"],
-                connection_bond=args["bond"],
+                connection_bond=args["connection_bond"],
                 desired_z_spacing=args["desired_z_spacing"],
                 templates_path=templates_path,
                 ion=args["ion"],
@@ -307,6 +309,16 @@ database.")
             )
 
         elif topol is True:
-            print("Generacion usando todas las topologias de la base de datos")
+            print("Generation using all database topologies")
+            if args["run_parallel"]:
+                tools.run_tobacco_parallel(
+                    topols_dict,
+                    **args
+                )
+            else:
+                tools.run_tobacco_serial(
+                    topols_dict,
+                    **args
+                )
 
     return "Done!"

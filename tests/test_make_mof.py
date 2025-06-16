@@ -3,6 +3,7 @@ import os
 import shutil
 from tobacco import tools
 from tobacco.ciftemplate2graph import CrystalGraph
+import random
 
 
 def gen_input_com():
@@ -121,4 +122,101 @@ class MakeMOF3DTest(unittest.TestCase):
         tools.gen_sbu_edge(**edge_options)
 
         result = tools.make_MOF(**self.options)
+        self.assertEqual(result, "Done!")
+
+
+class MakeMOF_SerialTest(unittest.TestCase):
+
+    def setUp(self):
+        topols_dict = tools.load_database()
+        templates = {top: topols_dict[top] for top in random.sample(list(topols_dict.keys()), 100)}
+
+        self.options = {
+            "templates": templates,
+            "n_max_atoms": 200,
+            "n_node_type": 1
+        }
+
+    def tearDown(self):
+        if os.path.exists("./nodes"):
+            shutil.rmtree("./nodes")
+
+        if os.path.exists("./edges"):
+            shutil.rmtree("./edges")
+
+        if os.path.exists("./outputs"):
+            shutil.rmtree("./outputs")
+
+        if os.path.isfile("N3.com"):
+            os.remove("N3.com")
+        pass
+
+    def test_make_mof_3D(self):
+        metal_options = {
+            "metal": "Sc",
+            "pointgroup": "Oh",
+            "distance": 0.8,
+            "output": None
+        }
+
+        tools.gen_sbu_metal_center(**metal_options)
+
+        gen_input_com()
+        edge_options = {
+            "file": "N3.com",
+            "ligand": "N3.com",
+            "ndx_X": [0, 2],
+            "output": None
+        }
+        tools.gen_sbu_edge(**edge_options)
+
+        result = tools.run_tobacco_serial(**self.options)
+        self.assertEqual(result, "Done!")
+
+
+class MakeMOF_ParallelTest(unittest.TestCase):
+
+    def setUp(self):
+        topols_dict = tools.load_database()
+        templates = {top: topols_dict[top] for top in random.sample(list(topols_dict.keys()), 100)}
+
+        self.options = {
+            "templates": templates,
+            "n_max_atoms": 200,
+            "n_node_type": 1
+        }
+
+    def tearDown(self):
+        if os.path.exists("./nodes"):
+            shutil.rmtree("./nodes")
+
+        if os.path.exists("./edges"):
+            shutil.rmtree("./edges")
+
+        if os.path.exists("./outputs"):
+            shutil.rmtree("./outputs")
+
+        if os.path.isfile("N3.com"):
+            os.remove("N3.com")
+
+    def test_make_mof_3D(self):
+        metal_options = {
+            "metal": "Sc",
+            "pointgroup": "Oh",
+            "distance": 0.8,
+            "output": None
+        }
+
+        tools.gen_sbu_metal_center(**metal_options)
+
+        gen_input_com()
+        edge_options = {
+            "file": "N3.com",
+            "ligand": "N3.com",
+            "ndx_X": [0, 2],
+            "output": None
+        }
+        tools.gen_sbu_edge(**edge_options)
+
+        result = tools.run_tobacco_parallel(**self.options)
         self.assertEqual(result, "Done!")

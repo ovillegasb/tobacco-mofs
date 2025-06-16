@@ -154,17 +154,20 @@ class CrystalGraph:
         cz = (cL**2 - cx**2 - cy**2)**0.5
         self.unit_cell = np.array([[ax, ay, az], [bx, by, bz], [cx, cy, cz]]).T
         ne = 0
+        nc = 0
 
         for line in self.template:
             s = line.split()
             if isvert(s):
                 ty = re.sub('[^a-zA-Z]', '', s[0])
                 types.append(ty)
+                nc += 1
                 f_nvec = np.array(list(map(float, s[2:5])))
                 c_nvec = np.dot(self.unit_cell, f_nvec)
                 G.add_node(
                     s[0],
                     type=ty,
+                    index=nc,
                     fcoords=f_nvec,
                     ccoords=c_nvec,
                     cn=[],
@@ -183,10 +186,10 @@ class CrystalGraph:
                     )
                 nlbl = -1 * lbl
                 if (
-                    (s[0], s[1], *lbl) not in aae and
-                    (s[1], s[0], *lbl) not in aae and
-                    (s[0], s[1], *nlbl) not in aae and
-                    (s[1], s[0], *nlbl) not in aae
+                    (s[0], s[1], lbl[0], lbl[1], lbl[2]) not in aae and
+                    (s[1], s[0], lbl[0], lbl[1], lbl[2]) not in aae and
+                    (s[0], s[1], nlbl[0], nlbl[1], nlbl[2]) not in aae and
+                    (s[1], s[0], nlbl[0], nlbl[1], nlbl[2]) not in aae
                 ):
                     ne += 1
                     aae.append((s[0], s[1], *lbl))
@@ -199,7 +202,7 @@ class CrystalGraph:
                     self.max_le = min(self.max_le, cdist)
                     G.add_edge(
                         s[0], s[1],
-                        key=(len(aae), *lbl),
+                        key=(ne, lbl[0], lbl[1], lbl[2]),
                         label=lbl,
                         length=le,
                         fcoords=ef_coords,
@@ -231,12 +234,13 @@ class CrystalGraph:
             for count, (e0, e1, key, data) in enumerate(
                 sub.edges(keys=True, data=True), 1
             ):
-                key = (count,) + key[1:]
+                key = tuple([count] + [k for k in key[1:]])
+                data["index"] = count
                 l = sorted([
                     re.sub('[^a-zA-Z]', '', e0), re.sub('[^a-zA-Z]', '', e1)
                 ])
                 self.edge_types.add(tuple(l))
-                SG.add_edge(e0, e1, key=key, type=tuple(l), **data)
+                SG.add_edge(e0, e1, key=key, type=(l[0], l[1]), **data)
 
             self.subgraphs.append(SG)
 

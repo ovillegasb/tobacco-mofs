@@ -1168,28 +1168,28 @@ elements, no cif will be written')
 
 def run_tobacco_serial(templates, **kwargs):
     """Run ToBaCco in serial."""
-    # i = 0
     for name in templates:
         make_MOF(templates[name], **kwargs)
-        # i += 1
-        # if i == 2:
-        #     break
+
+    return "Done!"
 
 
-def run_tobacco_parallel(templates, n_node_type=10, n_max_atoms=100, connection_bond=CONNECTION_SITE_BOND_LENGTH, desired_z_spacing=4.0):
+def make_MOF_wrapper(args):
+    template, kwargs = args
+    return make_MOF(template, **kwargs)
+
+
+def run_tobacco_parallel(templates, **kwargs):
     """Run ToBaCco in parallel."""
     poolSize = multiprocessing.cpu_count()
     print('Running parallel on', poolSize, 'processors...')
-    args = [(templates[name], n_node_type, n_max_atoms, connection_bond) for name in templates]
-    #TODO
-    # def wrapper_make_MOF(template, n_node_type=n_node_type, n_max_atoms=n_max_atoms):
-    #     return make_MOF(template, n_node_type=n_node_type, n_max_atoms=n_max_atoms)
 
-    # make_MOF_partial = partial(wrapper_make_MOF, n_node_type=n_node_type)
+    args = [(template, kwargs) for template in templates.values()]
 
     with Pool(processes=poolSize) as pool:
-        for _ in pool.starmap(make_MOF, args):
-            pass
+        results = pool.map(make_MOF_wrapper, args)
+
+    return "Done!"
 
 
 def read_input_gaus(file):
