@@ -10,6 +10,7 @@ Author: Orlando Villegas
 
 import os
 import re
+from typing import List, Tuple
 import datetime
 import itertools
 import glob
@@ -23,6 +24,8 @@ import pandas as pd
 import ase
 from ase.geometry.analysis import Analysis
 import ase.io
+import random
+
 
 # Specific function from ToBaCco
 from tobacco.ciftemplate2graph import CrystalGraph
@@ -230,11 +233,47 @@ def nodes_and_edges_exist(nodes="./nodes", edges="./edges"):
     return True
 
 
-def load_database():
+def extract_kr_coords_from_cif(cif_path: str, new_cell: np.ndarray = None) -> np.ndarray:
+    """
+    Extracts the cartesian coordinates of Kr atoms from a CIF file using ASE,
+    and optionally transforms them to a new unit cell.
+
+    Parameters
+    ----------
+    cif_path : str
+        Path to the CIF file.
+    new_cell : np.ndarray, optional
+        New 3x3 cell matrix to scale the fractional coordinates.
+
+    Returns
+    -------
+    np.ndarray
+        Cartesian coordinates of Kr atoms (N x 3).
+    """
+    atoms = ase.io.read(cif_path)
+
+    # Boolean mask for Kr atoms
+    mask = [atom.symbol == "Kr" for atom in atoms]
+    if not any(mask):
+        return np.empty((0, 3))
+
+    # Get fractional coordinates of He atoms
+    frac_coords = atoms.get_scaled_positions()[mask]
+
+    # Use new cell if provided, else original
+    cell_matrix = new_cell if new_cell is not None else atoms.cell.array
+
+    # Convert to cartesian
+    cart_coords = np.dot(frac_coords, cell_matrix)
+
+    return cart_coords
+
+
+def load_database(db_path=db):
     """Load ToBaCco database."""
-    print("ToBaCco path:", db)
-    topols_pth = os.path.join(db, 'template_database/*.cif')
-    topols_pth_2D = os.path.join(db, 'template_2D_database/*.cif')
+    print("ToBaCco path:", db_path)
+    topols_pth = os.path.join(db_path, 'template_database/*.cif')
+    topols_pth_2D = os.path.join(db_path, 'template_2D_database/*.cif')
     templates = sorted(glob.glob(topols_pth_2D) + glob.glob(topols_pth))
     # topols_dict = {cif.replace(".cif", ""): cif for cif in templates}
     topols_dict = {
@@ -558,7 +597,25 @@ def write_cif_SBU(
     print(f"File written: {file}")
 
 
-def save_state(coord_list, box, angles, name="test", ft="cif", pbc=True, is2D=False, desired_z_spacing=4.0):
+def rotate_randomly(atoms):
+    """
+    Apply a random rotation around x, y, and z axes to an ASE Atoms object.
+    The rotation is centered at the molecule's center of mass.
+    """
+    for axis in ['x', 'y', 'z']:
+        angle = random.uniform(0, 360)
+        atoms.rotate(angle, axis, center=atoms.get_center_of_mass())
+
+
+def save_state(
+        coord_list,
+        box, angles,
+        name="test", ft="cif",
+        pbc=True,
+        is2D=False, desired_z_spacing=4.0,
+        ion_coords=[], ion_file=None,
+        n_ions=0,
+        **kwargs):
     """Save structure o cif file sing ASE."""
     struct = ase.Atoms()
     for pn in coord_list:
@@ -568,6 +625,24 @@ def save_state(coord_list, box, angles, name="test", ft="cif", pbc=True, is2D=Fa
 
     struct.set_cell(box + angles)
     struct.set_pbc(pbc)
+
+    if len(ion_coords) > 0 and ion_file is not None:
+        print(ion_file)
+        ion_struct = ase.io.read(ion_file)
+        print(ion_struct)
+
+        # Randomly select N pores without repetition
+        selected_centers = random.sample(list(ion_coords), n_ions) if n_ions > 0 else ion_coords
+        combined = struct.copy()
+        for idx, center in enumerate(selected_centers):
+            ion_copy = ion_struct.copy()
+            rotate_randomly(ion_copy)
+            translation = center - ion_copy.get_center_of_mass()
+            ion_copy.translate(translation)
+            combined += ion_copy
+            print(f"Ion #{idx+1} inserted at coordinates {center} with random rotation.")
+
+        struct = combined
 
     if is2D:
         desired_z_spacing = desired_z_spacing
@@ -611,7 +686,10 @@ def make_MOF(
         template, n_node_type=2, n_max_atoms=200,
         connection_bond=CONNECTION_SITE_BOND_LENGTH,
         desired_z_spacing=4.0, nodes_path="./nodes",
-        edges_path="./edges", outdir="./outputs", **kwargs
+        edges_path="./edges", outdir="./outputs",
+        ion=None,
+        templates_path=os.path.join(db, "template_database"),
+        **kwargs
 ):
     """
     Generate a MOF.
@@ -637,7 +715,13 @@ def make_MOF(
         Maximum number of atoms allowed per structure.
     """
     if not nodes_and_edges_exist(nodes_path, edges_path):
-        raise FileNotFoundError("Nodes and edges folders do not exist")
+        raise FileNotFoundError("Nodes and edges folders do not exist")    
+
+    if ion is not None:
+        if not os.path.isfile(ion):
+            raise FileNotFoundError("Ion file not found")
+
+    ion_coords = []
 
     print()
     print('==================================================================')
@@ -888,7 +972,9 @@ elements, no cif will be written')
                 scaled_coords = omega2coords(
                     net.start, net.TG, sc_omega_plus,
                     (sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma),
-                    num_vertices, template, g, WRITE_CHECK_FILES)
+                    num_vertices, template, g, WRITE_CHECK_FILES,
+                    templates_path=templates_path
+                )
 
                 # Here scaled node and edge place X to direction for topologies
                 nvecs, evecs = scaled_node_and_edge_vectors(
@@ -974,17 +1060,30 @@ elements, no cif will be written')
                 if "template_2D_database" in template:
                     is2D = True
 
+                if ion is not None:
+                    params = [sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma]
+                    cell = ase.cell.Cell.fromcellpar(params)
+                    cell_matrix = cell.array
+                    ion_coords = extract_kr_coords_from_cif(template, cell_matrix)
+                    ion_name = os.path.basename(ion).split(".")[0]
+                    n_ions = kwargs["n_ions"] if "n_ions" in kwargs else ""
+                    cifname += "_{}-{}".format(n_ions, ion_name)
+
                 if WRITE_CIF:
                     print('writing cif...')
                     if not os.path.exists(outdir):
                         os.mkdir(outdir)
+
                     save_state(
                         placed_all,
                         [sc_a, sc_b, sc_c],
                         [sc_alpha, sc_beta, sc_gamma],
                         name=f"{outdir}/{cifname}",
                         is2D=is2D,
-                        desired_z_spacing=desired_z_spacing
+                        desired_z_spacing=desired_z_spacing,
+                        ion_coords=ion_coords,
+                        ion_file=ion,
+                        **kwargs
                     )
 
                 # For me it's not necessary.

@@ -139,13 +139,26 @@ python -m tobacco -m Sc -pg D4h
 2. Now we are going to generate the edge from a gaussian .com file.
 
 ```bash
-python -m tobacco -l file_N3.com -X 0 2
+python -m tobacco -l N3.com -X 0 2
 ```
 
 3. In case we are interested in a particular topology we can check if it exists in the downloaded database.
 
 ```bash
 python -m tobacco --check_top sql
+```
+
+4. To generate a mof we can use the option `--make_MOF`, by setting `--make_MOF pcu` is generated for a single topology `pcu`, by setting the option without argument all topologies will be used.
+
+```bash
+python -m tobacco --make_MOF pcu
+```
+
+
+5. To generate a structure with an inserted ion, the `--ion` and `--n_ions` options are used. It is important to select the correct database containing the pore information of the system (`--db_path`).
+
+```bash
+python -m tobacco --db_path ./data --ion NH4.xyz --n_ions 4 --make_MOF pcu
 ```
 
 ## Testing

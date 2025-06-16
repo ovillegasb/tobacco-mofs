@@ -6,11 +6,12 @@ from tobacco.ciftemplate2graph import isvert
 
 # Database path
 database = os.path.dirname(__file__)
-templates_path = os.path.join(database, "template_database")
 
 
 def omega2coords(
-		start, TG, sc_omega_plus, uc_params, num_vertices, template, g, CHECK
+		start, TG, sc_omega_plus, uc_params, num_vertices, template, g, CHECK,
+		templates_path=os.path.join(database, "template_database"),
+		**kwargs
 	):
 
 	sc_a,sc_b,sc_c,sc_alpha,sc_beta,sc_gamma = uc_params

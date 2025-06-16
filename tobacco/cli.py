@@ -3,6 +3,7 @@
 import argparse
 from tobacco.make_topologies import download_topologies
 import tobacco.tools as tools
+import os
 
 
 TITLE = """\033[1;36m
@@ -29,6 +30,10 @@ Date: 2021-04-08
 https://github.com/tobacco-mofs/tobacco_3.0
 
 """
+
+# Database path
+root = os.path.dirname(__file__)
+db = os.path.join(root, "data")
 
 
 def options():
@@ -58,6 +63,13 @@ def options():
         default="http://rcsr.net/downloads/RCSRnets.cgd",
         dest="db",
         metavar="url"
+    )
+
+    fileinput.add_argument(
+        "--db_path",
+        help="Indicates the database path.",
+        default=db,
+        metavar="path"
     )
 
     fileinput.add_argument(
@@ -141,6 +153,25 @@ def options():
         default=None
     )
 
+    ion_insertion = parser.add_argument_group(
+        "\033[1;36mOptions used to control ion insertion.\033[m")
+
+    ion_insertion.add_argument(
+        "--ion",
+        help="Ion file name.",
+        type=str,
+        default=None,
+        metavar="file"
+    )
+
+    ion_insertion.add_argument(
+        "--n_ions",
+        help="Number of ions to insert.",
+        type=int,
+        default=0,
+        metavar="N"
+    )
+
     fileoutput = parser.add_argument_group(
         "\033[1;36mOutput settings\033[m")
 
@@ -154,11 +185,6 @@ def options():
 
     RunTobacco = parser.add_argument_group(
         "\033[1;36mOptions to run ToBaCco\033[m")
-
-    def parse_make_mof(value):
-        if value is None:
-            return True
-        return value
 
     RunTobacco.add_argument(
         "--make_MOF",
@@ -235,7 +261,7 @@ def main():
         topol = args["check_top"]
 
         print("Loading ToBaCco database ...")
-        topols_dict = tools.load_database()
+        topols_dict = tools.load_database(db_path=args["db_path"])
 
         if topol in topols_dict:
             print(f"The '{topol}' topology \033[1;36mexists\033[m in the \
@@ -260,7 +286,10 @@ database.")
 
     elif args["make_MOF"]:
         topol = args["make_MOF"]
-        topols_dict = tools.load_database()
+        db_path = args["db_path"]
+        topols_dict = tools.load_database(db_path)
+        templates_path = "" if db_path != db else db
+
         print("Running ToBaCco...")
 
         if isinstance(topol, str):
@@ -271,7 +300,10 @@ database.")
                 n_node_type=args["n_node_type"],
                 n_max_atoms=args["n_max_atoms"],
                 connection_bond=args["bond"],
-                desired_z_spacing=args["desired_z_spacing"]
+                desired_z_spacing=args["desired_z_spacing"],
+                templates_path=templates_path,
+                ion=args["ion"],
+                n_ions=args["n_ions"]
             )
 
         elif topol is True:
