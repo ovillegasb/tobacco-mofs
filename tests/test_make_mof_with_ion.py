@@ -3,6 +3,7 @@ import os
 import shutil
 import random
 from tobacco import tools
+from tobacco.ciftemplate2graph import CrystalGraph
 
 
 def gen_input_com():
@@ -191,3 +192,149 @@ class MakeMOF_ION_ParallelTest(unittest.TestCase):
 
         result = tools.run_tobacco_parallel(**self.options)
         self.assertEqual(result, "Done!")
+
+
+class MakeMOF_ION_Conformations_Test(unittest.TestCase):
+
+    def setUp(self):
+        topols_dict = tools.load_database(db_path="../porE/data_ions/")
+        # topols_dict = tools.load_database(db_path="./data/")
+        # templates = {top: topols_dict[top] for top in random.sample(list(topols_dict.keys()), 16)}
+        templates = topols_dict
+
+        self.options = {
+            "templates": templates,
+            "n_max_atoms": 100,
+            "n_node_type": 1,
+            "ion": "./NH4.xyz",
+            "templates_path": "",
+            "n_ions": 1
+        }
+
+        metal_options = {
+            "metal": "Sc",
+            "pointgroup": "Oh",
+            "distance": 0.8,
+            "output": None
+        }
+
+        # tools.gen_sbu_metal_center(**metal_options)
+        tools.gen_geometries_metal(**metal_options)
+
+        gen_input_com()
+        edge_options = {
+            "file": "N3.com",
+            "ligand": "N3.com",
+            "ndx_X": [0, 2],
+            "output": None
+        }
+        tools.gen_sbu_edge(**edge_options)
+
+        gen_input_ion_NH4_xyz()
+
+    def tearDown(self):
+        if os.path.exists("./nodes"):
+            shutil.rmtree("./nodes")
+
+        if os.path.exists("./edges"):
+            shutil.rmtree("./edges")
+
+        # if os.path.exists("./outputs"):
+        #     shutil.rmtree("./outputs")
+
+        if os.path.isfile("N3.com"):
+            os.remove("N3.com")
+
+        if os.path.isfile("NH4.xyz"):
+            os.remove("NH4.xyz")
+
+    def test_make_mof_3D(self):
+        result = tools.run_tobacco_serial(**self.options)
+        self.assertEqual(result, "Done!")
+
+
+class TopologiesAnalysisTest(unittest.TestCase):
+
+    def setUp(self):
+        self.topols_dict = tools.load_database(db_path="../porE/data_ions/")
+
+        self.options = {
+            "n_max_atoms": 100,
+            "n_node_type": 1,
+            "ion": "./NH4.xyz",
+            "templates_path": "",
+            "n_ions": 1
+        }
+
+        metal_options = {
+            "metal": "Sc",
+            "pointgroup": "Oh",
+            "distance": 0.8,
+            "output": None
+        }
+
+        # tools.gen_sbu_metal_center(**metal_options)
+        tools.gen_geometries_metal(**metal_options)
+
+        gen_input_com()
+        edge_options = {
+            "file": "N3.com",
+            "ligand": "N3.com",
+            "ndx_X": [0, 2],
+            "output": None
+        }
+        tools.gen_sbu_edge(**edge_options)
+
+        gen_input_ion_NH4_xyz()
+
+    def tearDown(self):
+        if os.path.exists("./nodes"):
+            shutil.rmtree("./nodes")
+
+        if os.path.exists("./edges"):
+            shutil.rmtree("./edges")
+
+        # if os.path.exists("./outputs"):
+        #     shutil.rmtree("./outputs")
+
+        if os.path.isfile("N3.com"):
+            os.remove("N3.com")
+
+        if os.path.isfile("NH4.xyz"):
+            os.remove("NH4.xyz")
+
+    def test_gen_node_from_crystalgraph(self):
+        template = self.topols_dict["utb"]
+        cg = CrystalGraph(template)
+        # print(cg)
+        # print(cg.graph)
+        G = cg.graph
+        for node in G.nodes:
+            neighbors = list(G.neighbors(node))
+            # print(G[node])
+            print(f"Nodo {node} is connected to: {neighbors}")
+
+    def test_make_mof_3D(self):
+        topols_test = [
+            "srs", "pcuh", "qtzf", "qtzg", "qtzh",  # D3h
+            "ths",
+            "utb"
+        ]
+
+        for i, topol in enumerate(topols_test):
+            with self.subTest(run=i+1):
+                template = self.topols_dict[topol]
+                result = tools.make_MOF(
+                    template=template,
+                    **self.options
+                )
+                self.assertEqual(result, "Done!")
+
+
+
+    # result = tools.make_MOF(
+    #         template=topols_dict["pcu"],
+    #         ion="./Na.xyz",
+    #         templates_path="",
+    #         n_ions=8
+    #     )

@@ -15,7 +15,7 @@ setup(
     description='Topological MOF generator by molecular block alignment.',
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
-    url='https://github.com/ovillegasb/tobacco',
+    url='https://github.com/ovillegasb/tobacco-mofs',
     classifiers=[  # Clasificadores opcionales
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GNU Affero General Public License v3",

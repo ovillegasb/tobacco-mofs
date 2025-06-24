@@ -1,6 +1,7 @@
 from __future__ import print_function
 import os
 import itertools
+import math
 import numpy as np
 from numpy.linalg import norm
 from tobacco.bbcif_properties import X_vecs
@@ -12,14 +13,14 @@ import warnings
 def vertex_assign(
         TG, TVT, node_cns, unit_cell, USNA, SYM_TOL, ALL_NODE_COMBINATIONS
 ):
+    #TODO
 
     node_dict = dict((k, []) for k in TVT)
-
+    # The structures with the same number of connections of the topology are selected.
     for node in node_cns:
         for k in TVT:
             if node[0] == k[0]:
                 node_dict[k].append(node[1])
-
     if USNA:
         va = []
         va_append = va.append
@@ -88,7 +89,7 @@ there is not vertex_assignment.txt')
                         else:
                             unmatched += 1
                             matches = '(outside tolerance)'
-                        print('    ', cif, 'deviation =', np.round(disp,5), matches)
+                        print('    ', cif, 'deviation =', np.round(disp, 5), matches)
 
                     for d in distances:
                         if d[0] < SYM_TOL[coord_num]:
@@ -103,7 +104,7 @@ there is not vertex_assignment.txt')
             rearrange[a[0]].append((a[0], a[1], a[2]))
 
         va_uncomb = [rearrange[a] for a in rearrange]
-        
+
         for i in range(len(va_uncomb)):
             va_uncomb[i] = sorted(va_uncomb[i], key=lambda x: x[-1])
 
@@ -132,78 +133,110 @@ there is not vertex_assignment.txt')
 
 
 def assign_node_vecs2edges(TG, unit_cell, SYM_TOL, template_name):
-	
-	edge_assign_dict = dict((k,{}) for k in TG.nodes())
+    """
+    Assigns the orientation vectors of nodular building blocks to the edges in a template graph.
 
-	for n in TG.nodes(data=True):
+    This function attempts to align vectors from a node-type building block (e.g., metal center + geometry)
+    with the expected edge directions defined by the topological graph (TG). It uses a superposition algorithm
+    to best match the orientations and records deviations. Large mismatches raise a warning.
 
-		name,ndict = n
-		cif = ndict['cifname']
+    Parameters
+    ----------
+    TG : networkx.Graph or networkx.MultiGraph
+        The topological graph representing the structure. Each node has a 'cifname' key (the path to its .cif file).
+    unit_cell : np.ndarray
+        The 3x3 matrix of lattice vectors defining the unit cell.
+    SYM_TOL : float
+        Symmetry tolerance (not used directly here, but may be part of external helper functions).
+    template_name : str
+        Path or name of the template used, for warning message context.
 
-		bbxlabels = np.array([l[0] for l in X_vecs(cif, 'nodes', True)])
-		nodlabels = np.array([l[0] for l in node_vecs(n[0], TG, unit_cell, True)])
+    Returns
+    -------
+    edge_assign_dict : dict
+        Dictionary mapping each node label in the graph to its assigned edge directions.
+        Structure: {node_name: {edge_index: (building_block_label, magnitude, vector)}}
+    """
+    edge_assign_dict = dict((k, {}) for k in TG.nodes())
 
-		bbxvec = X_vecs(cif, 'nodes', False)
-		nodvec = node_vecs(n[0], TG, unit_cell, False)
-		
-		rmsd,rot,tran = mag_superimpose(bbxvec, nodvec)
-		aff_b = np.dot(bbxvec,rot) + tran
-		laff_b = np.c_[bbxlabels,aff_b]
-		lnodvec = np.c_[nodlabels,nodvec]
-		
-		asd = []
-		asd_append = asd.append
+    for n in TG.nodes(data=True):
+        name, ndict = n
+        cif = ndict['cifname']
 
-		distance_matrix = np.zeros((len(laff_b),len(laff_b)))
-		nrow = ncol = len(laff_b)
-		
-		for i in range(nrow):
-			for j in range(ncol):
-		
-				v1 = laff_b[i]
-				v1vec = np.array([float(q) for q in v1[1:]])
-				v1vec /= norm(v1vec)
-		
-				v2 = lnodvec[j]
-				v2vec = np.array([float(q) for q in v2[1:]])
-				v2vec /= norm(v2vec)
-		
-				dist = np.linalg.norm(v1vec - v2vec)
-				distance_matrix[i,j] += dist
-		
-		distances = []
-		for i in range(nrow):
-			for j in range(ncol):
-				distances.append((distance_matrix[i,j],i,j))
-		distances = sorted(distances, key=lambda x:x[0])
-		
-		used_edges = []
-		
-		for dist in distances:
-		
-			v1 = laff_b[dist[1]]
-			v1vec = np.array([float(q) for q in v1[1:]])
-			mag = np.linalg.norm(v1vec)
-		
-			v2 = lnodvec[dist[2]]
-			ind = int(v2[0])
-		
-			edge_assign = ind
-		
-			if edge_assign not in used_edges:
+        # Get labels and vectors for building block and node
+        bbxlabels = np.array([l[0] for l in X_vecs(cif, 'nodes', True)])
+        nodlabels = np.array([l[0] for l in node_vecs(n[0], TG, unit_cell, True)])
 
-				used_edges.append(edge_assign)
-				asd_append([ind, v1[0], mag, v1vec, dist[0]])
-				
-				if dist[0] > 0.60:
-					message = "There is a nodular building block vector that deviates from its assigned edge by more large\nthis may be fixed during scaling, but don't count on it!\n"
-					message = message + "the deviation is for " + cif + " assigned to " + name + " for template " + template_name
-					warnings.warn(message)
-			
-			if len(used_edges) == ncol:
-				break
+        bbxvec = X_vecs(cif, 'nodes', False)
+        nodvec = node_vecs(n[0], TG, unit_cell, False)
 
-		elad = dict((k[0], (k[1],k[2],k[3])) for k in asd)
-		edge_assign_dict[name] = elad
-					
-	return edge_assign_dict
+        # Superimpose building block vectors onto node vectors
+        try:
+            rmsd, rot, tran = mag_superimpose(bbxvec, nodvec, max_angle_deg=25)
+        except TypeError:
+            return None
+        except ValueError:
+            return None
+        aff_b = np.dot(bbxvec, rot) + tran  # aligned building block vectors
+        laff_b = np.c_[bbxlabels, aff_b]
+        lnodvec = np.c_[nodlabels, nodvec]
+
+        asd = []  # will store assignments (edge index, bbx_label, magnitude, aligned_vector, deviation)
+        asd_append = asd.append
+
+        distance_matrix = np.zeros((len(laff_b), len(laff_b)))
+        nrow = ncol = len(laff_b)
+
+        # Compute pairwise distances between aligned bbx vectors and template edge vectors
+        for i in range(nrow):
+            for j in range(ncol):
+                v1 = laff_b[i]
+                v1vec = np.array([float(q) for q in v1[1:]])
+                v1vec /= norm(v1vec)
+
+                v2 = lnodvec[j]
+                v2vec = np.array([float(q) for q in v2[1:]])
+                v2vec /= norm(v2vec)
+
+                dist = np.linalg.norm(v1vec - v2vec)
+                distance_matrix[i, j] += dist
+
+        # Sort distances to get best matches first
+        distances = []
+        for i in range(nrow):
+            for j in range(ncol):
+                distances.append((distance_matrix[i, j], i, j))
+        distances = sorted(distances, key=lambda x: x[0])
+
+        used_edges = []        
+        for dist in distances:
+            v1 = laff_b[dist[1]]
+            v1vec = np.array([float(q) for q in v1[1:]])
+            mag = np.linalg.norm(v1vec)
+
+            v2 = lnodvec[dist[2]]
+            ind = int(v2[0])  # edge index in the graph
+
+            edge_assign = ind
+            if edge_assign not in used_edges:
+                used_edges.append(edge_assign)
+                asd_append([ind, v1[0], mag, v1vec, dist[0]])
+
+                if dist[0] > 0.60:
+                    message = (
+                        "There is a nodular building block vector that deviates from its assigned edge by more large\n"
+                        "this may be fixed during scaling, but don't count on it!\n"
+                        f"the deviation is for {cif} assigned to {name} for template {template_name}"
+                    )
+                    warnings.warn(message)
+
+                    angle = math.degrees(math.acos(1 - dist[0]**2 / 2))
+                    print(f"Deviation angle: {angle:.2f} degrees between {v1[0]} and edge {ind}")
+
+            if len(used_edges) == ncol:
+                break
+
+        elad = dict((k[0], (k[1], k[2], k[3])) for k in asd)
+        edge_assign_dict[name] = elad
+
+    return edge_assign_dict

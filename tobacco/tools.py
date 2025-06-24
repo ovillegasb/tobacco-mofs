@@ -133,7 +133,10 @@ skeleton_X = {
             (0, -1, 0),
             (-1, 0, 0)
         ]
-    ],
+    ]
+}
+
+""",
     "C2v": [
         "XX",
         [
@@ -188,7 +191,7 @@ skeleton_X = {
             (0.8350163,  0.1501734,   -0.5293351)
         ]
     ]
-}
+"""
 
 
 def set_directory(folder, output=None):
@@ -233,7 +236,7 @@ def nodes_and_edges_exist(nodes="./nodes", edges="./edges"):
     return True
 
 
-def extract_kr_coords_from_cif(cif_path: str, new_cell: np.ndarray = None) -> np.ndarray:
+def extract_kr_coords_from_cif(cif_path: str, new_cell: np.ndarray = None):
     """
     Extracts the cartesian coordinates of Kr atoms from a CIF file using ASE,
     and optionally transforms them to a new unit cell.
@@ -247,26 +250,112 @@ def extract_kr_coords_from_cif(cif_path: str, new_cell: np.ndarray = None) -> np
 
     Returns
     -------
-    np.ndarray
-        Cartesian coordinates of Kr atoms (N x 3).
+    Tuple[np.ndarray, np.ndarray, np.ndarray]
+        - Cartesian coordinates of Kr atoms (N x 3)
+        - Diameters (N,)
+        - Distributions (N,)
     """
     atoms = ase.io.read(cif_path)
-
-    # Boolean mask for Kr atoms
-    mask = [atom.symbol == "Kr" for atom in atoms]
-    if not any(mask):
-        return np.empty((0, 3))
-
-    # Get fractional coordinates of He atoms
-    frac_coords = atoms.get_scaled_positions()[mask]
 
     # Use new cell if provided, else original
     cell_matrix = new_cell if new_cell is not None else atoms.cell.array
 
+    # Boolean mask for Kr atoms
+    mask = [atom.symbol == "Kr" for atom in atoms]
+    if not any(mask):
+        return np.empty((0, 3)), np.empty((0,)), np.empty((0,))
+
+    labels = [atom.tag if hasattr(atom, "tag") else atom.index + 1 for atom in atoms]
+    symbols = atoms.get_chemical_symbols()
+    kr_indices = [i for i, s in enumerate(symbols) if s == "Kr"]
+    kr_labels = [f"Kr{i+1}" for i in kr_indices]
+
+    # Get fractional coordinates of He atoms
+    frac_coords = atoms.get_scaled_positions()[mask]
     # Convert to cartesian
     cart_coords = np.dot(frac_coords, cell_matrix)
 
-    return cart_coords
+    with open(cif_path, "r") as f:
+        lines = f.readlines()
+
+    pore_data_start = None
+    for i, line in enumerate(lines):
+        if re.match(r"loop_", line) and i + 1 < len(lines):
+            if "_pore_label" in lines[i+1]:
+                pore_data_start = i
+                break
+
+    if pore_data_start is None:
+        raise ValueError("No _pore_label loop_ block found in CIF.")
+
+    headers = []
+    for i in range(pore_data_start + 1, len(lines)):
+        if lines[i].startswith("_"):
+            headers.append(lines[i].strip())
+        else:
+            break
+
+    required_headers = ["_pore_label", "_pore_center_x", "_pore_center_y", "_pore_center_z",
+                        "_pore_diameter", "_pore_distribution"]
+    header_indices = {h: headers.index(h) for h in required_headers}
+
+    # parse data
+    data_lines = []
+    for line in lines[pore_data_start + 1 + len(headers):]:
+        if not line.strip() or line.startswith("loop_") or line.startswith("_"):
+            break
+        data_lines.append(line.strip())
+
+    # extract infor per label
+    pore_info_map = {}
+    for line in data_lines:
+        tokens = line.split()
+        label = tokens[header_indices["_pore_label"]]
+        diameter = float(tokens[header_indices["_pore_diameter"]])
+        distribution = float(tokens[header_indices["_pore_distribution"]])
+        pore_info_map[label] = (diameter, distribution)
+
+    # Asociar info a cada Kr extraído
+    diameters = []
+    distributions = []
+    for label in kr_labels:
+        if label not in pore_info_map:
+            raise ValueError(f"Pore metadata for {label} not found in CIF.")
+        d, dist = pore_info_map[label]
+        diameters.append(d)
+        distributions.append(dist)
+
+    # Indexes for ordering from largest to smallest diameter
+    sort_idx = np.argsort(-np.array(diameters))
+
+    sorted_coords = cart_coords[sort_idx]
+    sorted_diameters = np.array(diameters)[sort_idx]
+    sorted_distributions = np.array(distributions)[sort_idx]
+
+    return sorted_coords, sorted_diameters, sorted_distributions
+
+
+def SBU_coords_to_xyz_list(all_SBU_coords, symbol="X"):
+    """
+    Convierte all_SBU_coords en una lista de coordenadas con símbolo.
+
+    Parameters
+    ----------
+    all_SBU_coords : list of (str, list)
+        Salida de SBU_coords: [('V1', [[1, vec1], [2, vec2], ...]), ...]
+
+    symbol : str
+        Símbolo que se usará para cada vector (p. ej., "X")
+
+    Returns
+    -------
+    list of [symbol, x, y, z]
+    """
+    xyz_list = []
+    for vertex, vec_list in all_SBU_coords:
+        for idx, vec in vec_list:
+            xyz_list.append([symbol, float(vec[0]), float(vec[1]), float(vec[2])])
+    return xyz_list
 
 
 def load_database(db_path=db):
@@ -280,6 +369,30 @@ def load_database(db_path=db):
         os.path.basename(cif).replace(".cif", ""): cif for cif in templates
     }
     return topols_dict
+
+
+def ea_dict_to_xyz_list(ea_dict):
+    """
+    Convierte un diccionario de vectores asignados a aristas (ea_dict)
+    en una lista de coordenadas con símbolo atómico para visualización.
+
+    Parameters
+    ----------
+    ea_dict : dict
+        Diccionario tipo {'V1': {edge_id: (symbol, magnitude, vector), ...}, ...}
+
+    Returns
+    -------
+    coords_list : list
+        Lista de listas con formato [symbol, x, y, z]
+    """
+    coords_list = []
+
+    for vertex, edges in ea_dict.items():
+        for edge_id, (symbol, _, vec) in edges.items():
+            coords_list.append([str(symbol), float(vec[0]), float(vec[1]), float(vec[2])])
+
+    return coords_list
 
 
 def dummy_geometry(poitgroup):
@@ -613,10 +726,11 @@ def save_state(
         name="test", ft="cif",
         pbc=True,
         is2D=False, desired_z_spacing=4.0,
-        ion_coords=[], ion_file=None,
+        pore_info=(), ion_file=None,
         n_ions=0,
         **kwargs):
     """Save structure o cif file sing ASE."""
+    warm = ""
     struct = ase.Atoms()
     for pn in coord_list:
         at = re.sub(r"\d*", "", pn[0])
@@ -626,20 +740,57 @@ def save_state(
     struct.set_cell(box + angles)
     struct.set_pbc(pbc)
 
-    if len(ion_coords) > 0 and ion_file is not None:
-        print(ion_file)
+    if len(pore_info) > 0 and ion_file is not None:
+        ion_coords, diameters, distributions = pore_info
         ion_struct = ase.io.read(ion_file)
-        print(ion_struct)
+        min_distance = 5.0
 
+        # 1. We order by distribution (descending probability)
+        sort_idx = np.argsort(-distributions)
+        ion_coords = ion_coords[sort_idx]
+        diameters = diameters[sort_idx]
+        distributions = distributions[sort_idx]
+
+        # 2. We select first the most likely pore, then random ones that are not too close together.
         # Randomly select N pores without repetition
-        selected_centers = random.sample(list(ion_coords), n_ions) if n_ions > 0 else ion_coords
+        # selected_centers = random.sample(list(ion_coords), n_ions) if n_ions > 0 else ion_coords
+        # selected_centers = list(pore_info[0])
+        # random.shuffle(selected_centers)
+        selected_centers = []
+        used_indices = set()
+        for i, center in enumerate(ion_coords):
+            if len(selected_centers) == 0:
+                selected_centers.append(center)
+                used_indices.add(i)
+                continue
+
+            # 3. Verify that it is more than `min_distance` from those already used.
+            too_close = any(np.linalg.norm(center - prev_center) < min_distance for prev_center in selected_centers)
+            if too_close:
+                continue
+
+            selected_centers.append(center)
+            used_indices.add(i)
+
+            # if len(selected_centers) == n_ions:
+            #     break
+
+        selected_centers = selected_centers[:n_ions]
+        # Warning if all could not be inserted
+        if len(selected_centers) < n_ions:
+            print(f"[Warning] Only {len(selected_centers)} of the {n_ions} pores requested could be selected.")
+            warm = f"_warning_{len(selected_centers)}_ions_inserted"
+
+        # 4. Insert ions
         combined = struct.copy()
+        inserted_centers = []
         for idx, center in enumerate(selected_centers):
             ion_copy = ion_struct.copy()
             rotate_randomly(ion_copy)
             translation = center - ion_copy.get_center_of_mass()
             ion_copy.translate(translation)
             combined += ion_copy
+            inserted_centers.append(center)
             print(f"Ion #{idx+1} inserted at coordinates {center} with random rotation.")
 
         struct = combined
@@ -678,7 +829,7 @@ def save_state(
         #     print(at)
         #     print(type(at))
 
-    ase.io.write(f"{name}.{ft}", struct)
+    ase.io.write(f"{name}{warm}.{ft}", struct)
     print(f"{name}.{ft} - Saved! ")
 
 
@@ -721,8 +872,6 @@ def make_MOF(
         if not os.path.isfile(ion):
             raise FileNotFoundError("Ion file not found")
 
-    ion_coords = []
-
     print()
     print('==================================================================')
     print('template:', template)
@@ -754,7 +903,7 @@ def make_MOF(
         # ---------------------------------------------
         if len(net.TVT) > n_node_type:
             print("Topology with number of node types greater than the \
-one defined (%s)" % n_node_type)
+one defined (%d)" % n_node_type)
             return None
 
         net.TVT = sorted(net.TVT, key=lambda x: x[0], reverse=True)
@@ -773,7 +922,7 @@ one defined (%s)" % n_node_type)
         )
         for e0, e1, data in net.TG.edges(data=True):
             edge_counts[data['type']] += 1
-        print("edge_counts:", edge_counts)
+        print("edge counts per type:", edge_counts)
 
         # if it's empty, not nodes weren't assign
         vas = vertex_assign(
@@ -899,11 +1048,14 @@ elements, no cif will be written')
                 # Here, it's where tobacco place the sbus.
                 ea_dict = assign_node_vecs2edges(
                     net.TG, net.unit_cell, SYMMETRY_TOL, template)
+                if ea_dict is None:
+                    print('Problems assigning node and edge blocks.')
+                    print('Moving to the next tempate...')
+                    continue
                 all_SBU_coords = SBU_coords(
                     net.TG, ea_dict, connection_bond, edges_path)
-
                 #REVISAR
-                #-------->
+                #--------
                 scaler = UnitCellScaler(
                     all_SBU_coords,
                     net.cell_params,
@@ -925,8 +1077,10 @@ elements, no cif will be written')
                 sc_beta = sc_cell_parms["beta"]
                 sc_gamma = sc_cell_parms["gamma"]
 
-                # sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma, sc_covar, Bstar_inv, max_length, callbackresults, ncra, ncca, scaling_data = scale(all_SBU_coords,a,b,c,ang_alpha,ang_beta,ang_gamma,max_le,num_vertices,Bstar,alpha,num_edges,FIX_UC,SCALING_ITERATIONS,PRE_SCALE,MIN_CELL_LENGTH,OPT_METHOD)
-                #-------->
+                # sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma, sc_covar, Bstar_inv, max_length, callbackresults, ncra,
+                #   ncca, scaling_data = scale(all_SBU_coords,a,b,c,ang_alpha,ang_beta,ang_gamma,max_le,num_vertices,
+                #   Bstar,alpha,num_edges,FIX_UC,SCALING_ITERATIONS,PRE_SCALE,MIN_CELL_LENGTH,OPT_METHOD)
+                # -------->
 
                 print('*******************************************')
                 print('The scaled unit cell parameters are : ')
@@ -950,7 +1104,7 @@ elements, no cif will be written')
                 if cflag:
                     continue
 
-                scaled_params = [sc_cell_parms[par] for par in sc_cell_parms]
+                # scaled_params = [sc_cell_parms[par] for par in sc_cell_parms]
                 sc_Alpha = np.r_[alpha[0:num_edges-num_vertices+1, :], sc_covar]
                 sc_omega_plus = np.dot(Bstar_inv, sc_Alpha)
 
@@ -1012,30 +1166,13 @@ elements, no cif will be written')
                     placed_edges = adjust_edges(placed_edges, placed_nodes, sc_unit_cell)
 
                 placed_nodes = np.c_[placed_nodes, np.array(['node' for i in range(len(placed_nodes))])]
-                #######REMOVE
-                # save_state(placed_nodes, [sc_a, sc_b, sc_c], [sc_alpha, sc_beta, sc_gamma], name="test_placed_nodes")
-                #######
-
                 placed_edges = np.c_[placed_edges, np.array(['edge' for i in range(len(placed_edges))])]
-                #######REMOVE
-                # save_state(placed_edges, [sc_a, sc_b, sc_c], [sc_alpha, sc_beta, sc_gamma], name="test_placed_edges")
-                #######
-
                 placed_all = list(placed_nodes) + list(placed_edges)
-                #######REMOVE
-                # save_state(placed_all, [sc_a, sc_b, sc_c], [sc_alpha, sc_beta, sc_gamma], name="test_placed_all")
-                #######
                 bonds_all = node_bonds + edge_bonds
-
-                # if WRITE_CHECK_FILES:
-                #     write_check_cif(template, placed_nodes, placed_edges, g, scaled_params, sc_unit_cell)
 
                 if REMOVE_DUMMY_ATOMS:
                     # REVISAR
                     placed_all, bonds_all, nconnections = remove_Fr(placed_all, bonds_all)
-                #######REMOVE
-                # save_state(placed_all, [sc_a, sc_b, sc_c], [sc_alpha, sc_beta, sc_gamma], name="test_placed_all_noDummy")
-                #######
 
                 vnames = '_'.join([v.split('.')[0] for v in v_set])
                 enames_list = [e[0:-4] for e in ea]
@@ -1064,7 +1201,10 @@ elements, no cif will be written')
                     params = [sc_a, sc_b, sc_c, sc_alpha, sc_beta, sc_gamma]
                     cell = ase.cell.Cell.fromcellpar(params)
                     cell_matrix = cell.array
-                    ion_coords = extract_kr_coords_from_cif(template, cell_matrix)
+                    pore_info = extract_kr_coords_from_cif(template, cell_matrix)
+                    print("Cartesian coordinates (Å):\n", pore_info[0])
+                    print("Diameters (Å):", pore_info[1])
+                    print("Distribution (%):", pore_info[2])
                     ion_name = os.path.basename(ion).split(".")[0]
                     n_ions = kwargs["n_ions"] if "n_ions" in kwargs else ""
                     cifname += "_{}-{}".format(n_ions, ion_name)
@@ -1081,12 +1221,12 @@ elements, no cif will be written')
                         name=f"{outdir}/{cifname}",
                         is2D=is2D,
                         desired_z_spacing=desired_z_spacing,
-                        ion_coords=ion_coords,
+                        pore_info=pore_info,
                         ion_file=ion,
                         **kwargs
                     )
 
-                # For me it's not necessary.
+                # Check later
                 '''
 
                 print(nconnections)
@@ -1187,7 +1327,7 @@ def run_tobacco_parallel(templates, **kwargs):
     args = [(template, kwargs) for template in templates.values()]
 
     with Pool(processes=poolSize) as pool:
-        results = pool.map(make_MOF_wrapper, args)
+        _ = pool.map(make_MOF_wrapper, args)
 
     return "Done!"
 

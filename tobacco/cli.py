@@ -270,6 +270,12 @@ database.")
         else:
             print(f"The '{topol}' topology does not exist in the database.")
 
+    elif args["make_XX_edge"]:
+        print("Making XX edge block:")
+        if not os.path.exists("./edges"):
+            os.mkdir("./edges")
+        tools.make_XX_edge()
+
     elif args["metal"] is not None:
         print("Generating a node block")
         if args["pointgroup"] is not None:

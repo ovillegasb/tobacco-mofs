@@ -25,7 +25,7 @@ def SBU_coords(TG, ea_dict, csbl, edges_path=None):
         list: List of tuples (vertex, vectors), where 'vectors' is a list of
         [index, scaled_vector]
     """
-    
+
     SBU_coords = []
     SBU_coords_append = SBU_coords.append
 
@@ -60,9 +60,8 @@ def SBU_coords(TG, ea_dict, csbl, edges_path=None):
                     total_length = dx_v + dx_ov + csbl
                 else:
                     # Actual bond + padding on both sides
-                    #total_length = dx_v + dx_ov + length + 2 * csbl
+                    # total_length = dx_v + dx_ov + length + 2 * csbl
                     total_length = length + 2 * csbl
-
 
                 # Normalize vector and scale with total length and direction
                 svec = (xvec / np.linalg.norm(xvec)) * total_length * direction

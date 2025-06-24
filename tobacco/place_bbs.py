@@ -9,6 +9,7 @@ import itertools
 import re
 import os
 import random
+import warnings
 
 # Database path
 database = os.path.dirname(__file__)
@@ -42,63 +43,101 @@ def rotate_axis_XX(coord, names):
     return news_coord
 
 
-def match_vectors(a1,a2,num):
+def match_vectors(a1, a2, num):
+    dist1 = [(np.linalg.norm(a1[0]-a1[i]), i) for i in range(len(a1))]
+    dist2 = [(np.linalg.norm(a2[0]-a2[i]), i) for i in range(len(a2))]
 
-	dist1 = [(np.linalg.norm(a1[0]-a1[i]),i) for i in range(len(a1))]
-	dist2 = [(np.linalg.norm(a2[0]-a2[i]),i) for i in range(len(a2))]
+    dist1.sort(key=lambda x: x[0])
+    dist2.sort(key=lambda x: x[0])
 
-	dist1.sort(key=lambda x: x[0])
-	dist2.sort(key=lambda x: x[0])
+    vecs1 = np.array([a1[i] for i in [dist1[j][1] for j in range(num)]])
+    vecs2 = np.array([a2[i] for i in [dist2[j][1] for j in range(num)]])
 
-	vecs1 = np.array([a1[i] for i in [dist1[j][1] for j in range(num)]])
-	vecs2 = np.array([a2[i] for i in [dist2[j][1] for j in range(num)]])
-	
-	return vecs1,vecs2
+    return vecs1, vecs2
 
-def mag_superimpose(a1,a2):
-	
-	sup = SVDSuperimposer()
 
-	a1 = np.asarray(a1)
-	a2 = np.asarray(a2)
-	mags = [norm(v) for v in a2]
+def mag_superimpose(a1, a2, max_angle_deg=30):
+    """
+    Superimpose vector set a1 onto a2, preserving the magnitudes of a2,
+    by finding the best rotation and translation that minimizes RMSD.
 
-	if len(a1) <= 7:
+    Parameters
+    ----------
+    a1 : array-like
+        Vector set to be transformed (reference vectors, e.g. from the block).
+    a2 : array-like
+        Target vector set (e.g. from the topology graph).
+    max_angle_deg : float
+        Maximum allowed angular deviation in degrees between matched vectors.
 
-		min_dist = (1.0E6, 'foo', 'bar')
-		
-		for l in itertools.permutations(a1):
+    Returns
+    -------
+    (rmsd, rotation_matrix, translation_vector) : tuple
+        RMSD value and the best-fit rotation + translation.
+    """
+    sup = SVDSuperimposer()  # SVD-based superimposition from Bio.PDB
+    a1 = np.asarray(a1)
+    a2 = np.asarray(a2)
+    mags = [norm(v) for v in a2]  # Save magnitudes of target vectors
+    max_angle_rad = np.radians(max_angle_deg)
+    best_result = None
 
-			p = np.array([m*v/norm(v) for m,v in zip(mags,l)])
-			sup.set(a2,p)
-			sup.run()
-			rot,tran = sup.get_rotran()
-			rms = sup.get_rms()
+    # Handle small number of vectors with permutations
+    if len(a1) <= 7:
+        # For small sets, try all permutations (factorial cost)
+        # min_dist = (1.0E6, None, None)  # Store best (rmsd, rot, tran)
+        for l in itertools.permutations(a1):
+            # Scale each vector in permutation to match magnitude of a2
+            p = np.array([m * v / norm(v) for m, v in zip(mags, l)])
+            sup.set(a2, p)  # target = a2, mobile = scaled permutation
+            sup.run()
+            rot, tran = sup.get_rotran()
+            rms = sup.get_rms()
 
-			if rms < min_dist[0]:
-				min_dist = (rms,rot,tran)
-	
-	else:
+            # Check max angle
+            aligned = np.dot(p, rot) + tran
+            angles = [
+                np.arccos(np.clip(np.dot(v1 / norm(v1), v2 / norm(v2)), -1.0, 1.0))
+                for v1, v2 in zip(a2, aligned)
+            ]
+            if max(angles) > max_angle_rad:
+                continue
 
-		a1,a2 = match_vectors(a1,a2,6)
-		mags = [norm(v) for v in a2]
-		
-		min_dist = (1.0E6, 'foo', 'bar')
-		
-		for l in itertools.permutations(a1):
+            if best_result is None or rms < best_result[0]:
+                best_result = (rms, rot, tran)
 
-			p = np.array([m*v/norm(v) for m,v in zip(mags,l)])
-			sup.set(a2,p)
-			sup.run()
-			rot,tran = sup.get_rotran()
-			rms = sup.get_rms()
-		
-			if rms < min_dist[0]:
-				min_dist = (rms,rot,tran)
+    else:
+        # If too many vectors, match subsets instead (likely for performance)
+        a1, a2 = match_vectors(a1, a2, 6)  # heuristic pruning
+        mags = [norm(v) for v in a2]
+        # min_dist = (1.0E6, None, None)
 
-	return min_dist
+        for l in itertools.permutations(a1):
+            p = np.array([m * v / norm(v) for m, v in zip(mags, l)])
+            sup.set(a2, p)
+            sup.run()
+            rot, tran = sup.get_rotran()
+            rms = sup.get_rms()
 
-def superimpose(a1,a2):
+            aligned = np.dot(p, rot) + tran
+            angles = [
+                np.arccos(np.clip(np.dot(v1 / norm(v1), v2 / norm(v2)), -1.0, 1.0))
+                for v1, v2 in zip(a2, aligned)
+            ]
+            if max(angles) > max_angle_rad:
+                continue
+
+            if best_result is None or rms < best_result[0]:
+                best_result = (rms, rot, tran)
+
+    if best_result is None:
+        # warnings.warn(f"No valid alignment found with angle deviation below {max_angle_deg}°")
+        raise ValueError(f"No valid alignment found with angle deviation below {max_angle_deg}°")
+
+    return best_result
+
+
+def superimpose(a1, a2):
 	
 	sup = SVDSuperimposer()
 
